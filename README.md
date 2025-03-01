@@ -1,67 +1,111 @@
-# Sortitoutsi_Keyword_Research
-Analyzing SEMRush search keyword data captured for Sortitoutsi.net on October 2023 using Excel, R, SQL and Tableau.
+# Spotify_Streaming_Data_Analysis
 
-![Sortitoutsi.net Organic Positions Tableau Dashboard](./images/Sortitoutsi_Organic_Positions.png)
-# Overview
-This repository contains the data analysis project "Keyword Research for Sortitoutsi.net," based on [SEMRush](https://www.semrush.com) data captured in October 2023. The project focuses on understanding the keyword landscape for Sortitoutsi.net, a community website servicing the Football Manager gaming community, through the lens of SEO, SERP features, and search intent. The analysis is aimed at driving actionable insights to optimize organic traffic and improve the site's visibility in search engines.
+![Empty Dash](./images/)
+# Executive Summary
+* TBD
+# Introduction
 
-This project focuses on an in-depth keyword research analysis for Sortitoutsi.net, a leading site dedicated to Football Manager content. The goal is to uncover insights into keyword performance, search efficiency, and site traffic that can guide content strategy and improve search engine rankings. The analysis was performed using R for data wrangling and analysis, with results visualized in Tableau.
+This analysis will cover my complete Spotify music streaming history up until January 27, 2025. We will explore what artists, songs, and genres were the most listened to, what time of day songs were listened to, how often I explored new artists, and uncovering any interesting trends typifying my musical tastes. We will see if it is possible to generate my "listening persona" based on the data we explore. 
 
-# Project Structure
-* **Data Sources**:
+# Methodology
+## Summary
+* Request extended streaming history data from Spotify. 
+* Download and extract streaming history data archive locally after receiving notification of report compilation.
+* Extract the archive and peruse dataset to answer the following questions:
+    * What does each record represent?
+    * What are the key measures?
+    * What are the key dimensions?
+* Create appropriate database schema and scripting to import the streaming history into our PostgreSQL database.
+* Use SQL queries, Pandas, and other tooling to conduct data cleaning, exploration and analysis processes. 
+## Data Extraction
+After using the download link provided in our Spotify email, we received a **16.2** MB zip archive; the extracted folder is named `Spotify Extended Streaming History` with this folder being **217** MB in size. The archive contents are as follows:
+* 18 `JSON` files capturing our audio listening history. Each file is approximately **12.3** MB in size and is prefixed with `Streaming_History_Audio_` in their respective file names
+* 1 `JSON` file capturing video watching history that is **40** KB in size.
+* 1 `ReadMeFirst_ExtendedStreamingHistory.pdf` file containing explanations for each technical field within each `JSON` record.  
 
-    * SEMRush keyword data for Sortitoutsi.net and its competitors in CSV format.
+# Findings and Analysis
 
-* **Objectives**:
-
-    * Identify high-performing keywords driving traffic to Sortitoutsi.net
-    *  Analyze keyword difficulty, search volume, CPC, and search intent
-    * Provide actionable recommendations to enhance site visibility and user engagement
-
-# Key Analysis and Insights
-## Keyword Categorization
-The top 100 keywords were categorized into six main groups:
-
-* Game Assets
-* Wonderkids & Best Players
-* Player Stats & Profiles
-* Clubs & Leagues
-* Tactics & Formations
-* Brand & Identity
-
-The analysis revealed that the "Brand & Identity" category holds significant search volume and efficiency, indicating strong domain authority. In contrast, categories like "Wonderkids" and "Game Assets" show potential for growth in search efficiency.
-
-## SERP Features and Search Intent
-Analyzed the SERP features associated with Sortitoutsi.net's top-ranking keywords. Sitelinks, Video, and Reviews emerged as the most common features, indicating a strong presence in search results. The study of search intent revealed that a large portion of the keywords are informational, providing opportunities to enhance content tailored to user needs.
-
-## CPC Analysis
-The cost-per-click (CPC) analysis demonstrated that Sortitoutsi.net saves **$7,487.92** per month in advertising costs by maintaining organic rankings. Specific categories like "Wonderkids" and "Tactics" offer the highest potential CPC value, presenting opportunities to monetize content further.
-
-## URL Performance
-A concentrated set of 42 unique URLs drive the majority of the site's traffic. Optimizing these pages and reducing keyword cannibalization could further enhance traffic flow and site authority.
-
-## Recommendations
-* **Focus on Expanding Game Assets and Wonderkids Content**: Given the high traffic and efficiency, there is potential to expand content in these categories, improving search visibility and user engagement.
-* **Optimize for High-Impact SERP Features**: Enhance content to align with common SERP features like Sitelinks and Videos to increase click-through rates.
-* **Target Low-Competition Keywords**: Prioritize keywords with lower difficulty scores but high search efficiency to capture more organic traffic with less competition.
-* **Reduce Keyword Cannibalization**: Consolidate content where multiple URLs compete for the same keywords to strengthen individual page authority.
-* **Explore Monetization Opportunities**: Focus on high-CPC keywords like those in the Wonderkids and Tactics categories to explore potential monetization strategies.
-
+# Recommendations
 
 ## Repository Structure
 * `data/`: Contains the original CSV files and associated database files used in the analysis.
 * `notebooks/`: Jupyter or Quarto notebooks documenting the analysis process.
-* `reports/`: Generated reports, including the Final Report and 
-Summary.
-* `notebooks/Sortitoutsi_Keyword_Research.qmd`: The main analysis document written in Quarto, detailing the entire keyword research process.
+* `reports/`: Generated reports, including the Final Report and Summary.
+* `notebooks/`:
 * `reports/Project_Overview_and_Insights.md`: Front-end document with generalized project information.
 * `README.md`: This document.
 
+# Appendix
+## Spotify Record Technical Fields
+ts
+:  Timestamp in UTC when the tracked stopped playing
 
-# How to Use This Repository
-1. Clone the repository to your local machine.
-2. Review the `README.md` for an overview of the project.
-3. Explore the `notebooks/` directory to see the detailed analysis and code.
-4. Review the `reports/` for a summary of insights and recommendations.
-5. Peruse the accompanying [Tableau Dashboard](https://public.tableau.com/app/profile/terry.bates4031/viz/Sortitoutsi_netOrganicPositions/SortitoutsiOrganicPositions) to surface keyword research data.
+username
+: Spotify Username
 
+platform
+: Platform used when streaming the track (e.g. Android OS, Google Chromecast)
+
+ms_played
+: Number of milliseconds stream was played.
+
+conn_country
+: Country code where stream was played.
+
+ip_addr
+: IP address logged when stream was played.
+
+master_metadata_track_name
+: Name of the track.
+
+master_metadata_album_artist_name
+: Name of the artist.
+
+master_metadata_album_album_name
+: Name of the album.
+
+spotify_track_uri
+: Resource identifier that can used for Desktop client search to locate artist, album, or track.
+
+episode_name
+: Name of the podcast.
+
+episode_show_name
+: Name of the show of the podcasat.
+
+spotify_episode_uri
+: Unique podcast episode identifier that can be used within Desktop client search.
+
+audiobook_title
+: Title of audiobook
+
+audiobook_uri
+:  Resource identifier that can used for Desktop client search to locate the audiobook 
+
+audiobook_chapter_uri
+:  Resource identifier that can used for Desktop client search to locate the audiobook chapter
+
+audiobook_chapter_title
+: Name of the audiobook title.
+
+reason_start
+: Value telling why the track started (e.g."clickrow", "trackdone").
+
+reason_end
+: Value telling why the track ended (e.g."endplay").
+
+
+shuffle
+: Boolean value if shuffle mode used when playing track.
+
+skipped
+: Boolean value if use skipped to the next song.
+
+offline
+: Boolean value if track played in offline mode.
+
+offline_timestamp
+: Timestamp if/when offline mode was used.
+
+incognito_mode
+:false
