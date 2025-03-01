@@ -1,0 +1,2086 @@
+---
+title: "Keyword Research and Site Traffic Analysis for Sortitoutsi.net"
+author: "Terry Bates"
+format: html
+editor: visual
+---
+
+# Introduction
+
+```{r,include=FALSE, echo=FALSE, message=FALSE, warning=FALSE, error=FALSE, results='hide'}
+#| echo: false
+options(repos = list(CRAN="http://cran.rstudio.com/"))
+install.packages("tidyverse")
+install.packages("purrr")
+install.packages("glue")
+install.packages("UpSetR")
+install.packages("tidyr")
+install.packages("ggplot2")
+install.packages("plotly")
+install.packages("dplyr")
+install.packages("reshape2")
+install.packages("duckdb")
+library(tidyverse)
+library(purrr)
+library(glue)
+library(dplyr)
+library(UpSetR)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(reshape2)
+library(duckdb)
+```
+
+```{r, include=FALSE, echo=FALSE}
+#| echo: false
+# Function to remove duplicate keywords from dataframe
+remove_keyword_duplicates <- function(df) {
+  # Find duplicate values in the 'keyword' column
+  cleaned_df_dupes <- df %>%
+    group_by(keyword) %>% # Group on keywords
+    filter(n() > 1) %>%  # If the count of a group is > 1, is a dupe
+    arrange(position, search_volume, traffic) %>% # set our sort criteria 
+    slice_head(n=1) # Retain the highest value
+
+  # After we have our dupes in a separate dataframe
+  # remove all duplicate rows in the original dataframe via filter
+  removed_dupes_df <- df %>%
+  filter(!(keyword %in% cleaned_df_dupes$keyword))
+  
+  # We then append the `cleaned_df_dupes` back into the 
+  # dataframe containing our original data
+  # Use rbind to append the cleaned dupes back onto original
+  output_df <- rbind(removed_dupes_df, cleaned_df_dupes)
+  
+  # Return our output
+  return(output_df)
+}
+
+```
+
+```{r, include=FALSE, echo=FALSE}
+#| echo: false
+library(ggplot2)
+library(plotly)
+
+# Define the function to generate an interactive histogram with optional summary stats
+create_interactive_histogram <- function(df, column_name, title = "Interactive Histogram", bins = 30, mean_value = NULL, median_value = NULL) {
+
+  # Calculate the total number of observations
+  total_observations <- nrow(df)
+  
+  # Create the histogram
+  df_hist <- ggplot(df, aes_string(x = column_name)) +
+    geom_histogram(aes(y = (..count..) / total_observations * 100, 
+                       text = paste("Count:", ..count..)),  # Tooltip text showing the count
+                   fill = "steelblue", color = "darkblue", boundary = 0, bins = bins) +
+    labs(title = title,
+         x = column_name,
+         y = "Frequency") +  # Label y-axis as Percent of Total
+    theme_minimal()
+
+  # Convert to interactive plot with custom tooltip
+  df_hist_interactive <- ggplotly(df_hist, tooltip = "text")
+  
+  # Return the interactive plot
+  return(df_hist_interactive)
+
+}
+```
+
+```{r, include=FALSE, echo=FALSE}
+#| echo: false
+# Load necessary libraries
+library(tibble)
+library(dplyr)
+
+
+# Reusable function to categorize keywords with more detailed logic
+categorize_keywords <- function(keywords) {
+  
+  # Initialize the dataframe
+  data <- tibble(
+    Keyword = keywords,
+    `Brand & Identity` = 0,
+    `Game Assets` = 0,
+    `Player Stats & Profiles` = 0,
+    `Wonderkids & Best Players` = 0,
+    `Tactics & Formations` = 0,
+    `Clubs & Leagues` = 0
+  )
+  
+  # Define logic for each category
+  for (i in 1:nrow(data)) {
+    keyword <- tolower(data$Keyword[i])
+    
+    # Brand & Identity
+    if (grepl("sortitoutsi|sort it out si|sortitousi|sortitioutsi|sortoutsi|sortitout", keyword)) {
+      data$`Brand & Identity`[i] <- 1
+    }
+    
+    # Game Assets
+    if (grepl("logo pack|face pack|facepack|kits|mods|badge pack|logos|stadium pack|kit pack|kit packs|kits megapack|player faces", keyword)) {
+      data$`Game Assets`[i] <- 1
+    }
+    
+    # Player Stats & Profiles
+    if (grepl("stats|wages|potential|hojlund|fergusson|bellingham|garnacho|ibeabuchi", keyword)) {
+      data$`Player Stats & Profiles`[i] <- 1
+    }
+    
+    # Wonderkids & Best Players
+    if (grepl("wonderkid|cheap wonderkids|best|young|cb|strikers|goalkeeper|lw|hojlund|fergusson|bellingham|garnacho", keyword)) {
+      data$`Wonderkids & Best Players`[i] <- 1
+    }
+    
+    # Tactics & Formations
+    if (grepl("tactics|tactic|formation|442", keyword)) {
+      data$`Tactics & Formations`[i] <- 1
+    }
+    
+    # Clubs & Leagues
+    if (grepl("fc|players|league|club|united|celtic|scotland|york|bromley|linfield|fort william|hashtag|wrexham|kings lynn|atletico pamplona|german", keyword)) {
+      data$`Clubs & Leagues`[i] <- 1
+    }
+  }
+  
+  return(data)
+}
+
+
+```
+
+```{r, include=FALSE, echo=FALSE}
+#| echo: false
+# Define the function
+summarize_and_plot <- function(filter_dfs, main_df, target_column, format_usd = FALSE) {
+  # Initialize an empty dataframe to store results
+  result_df <- data.frame(
+    Category = character(),
+    Total_Sum = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Loop over the list of dataframes
+  for (df_name in names(filter_dfs)) {
+    # Get the current dataframe
+    df <- filter_dfs[[df_name]]
+    
+    # Filter and summarize the target column
+    total_sum <- main_df %>%
+      filter(keyword %in% df$Keyword) %>%
+      summarize(Total_Sum = sum(.data[[target_column]], na.rm = TRUE)) %>%
+      pull(Total_Sum)
+    
+    # Append the results to the result_df dataframe
+    result_df <- rbind(result_df, data.frame(Category = df_name, Total_Sum = total_sum))
+  }
+  
+  # Generate the barplot
+  output_plot <- ggplot(result_df, aes(x = reorder(Category, Total_Sum), y = Total_Sum)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    labs(title = paste("Total", target_column, "by Keyword Category"),
+         x = "Keyword Category",
+         y = target_column) +
+    theme_minimal() +
+    coord_flip()
+  
+  # Conditionally format the y-axis as USD
+  if (format_usd) {
+    output_plot <- output_plot + 
+      scale_y_continuous(labels = scales::dollar_format(prefix = "$", suffix = "")) +
+      labs(y = paste(target_column, "(USD)"))
+  }
+  
+  output_plot <- ggplotly(output_plot)
+  output_plot
+}
+
+```
+
+```{r, include=FALSE, echo=FALSE}
+#| echo: false
+# Function to load the data
+load_competitor_data <- function(competitor, file_pattern) {
+  # Define the directory where the files are located (you might need to change this)
+  dir_path <- "./data"  # Current directory or specify the correct path
+  # Create a regex pattern to match the file
+  full_pattern <- paste0(".*", competitor, ".*", file_pattern)
+
+  # Find the matching file
+  file_name <- list.files(path = dir_path, pattern = full_pattern, full.names = TRUE)
+
+  # Ensure that exactly one file is found
+  if (length(file_name) == 1) {
+    # Load the CSV file, use `check.names = FALSE` to read 
+    # columns with strange characters
+    data <- read.csv(file_name, check.names = FALSE)
+    return(data)
+  } else if (length(file_name) == 0) {
+    stop(paste("No files found for pattern:", full_pattern))
+  } else {
+    stop(paste("Multiple files found for pattern:", full_pattern))
+  }
+}
+```
+
+## Overview
+
+This project conducts in-depth keyword research for Sortitoutsi.net, a prominent site within the Football Manager gaming community.
+The primary objective is to analyze Sortitoutsi.net's keyword profile, understand what types of keywords ranked highly and to gain understanding of how the site, along with other Football Manager community site competitors, ranked for various keywords using [SEMRush](https://www.semrush.com) data captured on October 2023.
+The dataset includes key metrics such as search volume, keyword difficulty, cost-per-click (CPC), and specific SERP features that influence user behavior and search visibility.
+By examining these metrics, we aim to uncover trends that can inform content strategy, boost the site's search engine rankings, and ultimately increase traffic.
+
+The analysis will involve categorizing keywords based on their search intent—whether users are looking for information, seeking downloadable content, or navigating directly to the site.
+Additionally, we'll explore how different SERP features impact keyword performance, with the goal of optimizing Sortitoutsi.net's content for maximum relevance and visibility.
+This notebook will capture the technical processes of cleaning the data, analyzing keyword performance, and generating visualizations that highlight the most actionable insights.
+The results will provide a clear direction for enhancing the site's SEO strategy, aligning with the broader goals of increasing engagement and solidifying Sortitoutsi.net's authority within its niche.
+
+## Data Sources & Tools
+
+### Data Sources
+
+To begin our analysis, we will explore the organic positions of keywords that Sortitoutsi.net (SIOSI) and its competitors rank for.
+Each file related to these organic keyword positions follows the naming convention:
+
+\``<domain-name>-organic.Positions-uk-<timestamp>.csv`\`
+
+Example:
+
+```         
+sortitoutsi.net-organic.Positions-uk-20231011-2023-10-12T17_50_37Z
+```
+
+This naming convention indicates that our market is scoped to the UK, and each file represents data from only a single domain at a time.
+
+### Explanation of Terms
+
+Each line within these CSV files contains the following data:
+
+-   **Keyword:** The search term or phrase users enter into search engines, representing the solutions and answers people seek related to a topic.
+
+-   **Volume:** The average number of monthly searches for the keyword, indicating the keyword's popularity or search demand.
+
+-   **Keyword Difficulty (KD):** A score (0-100) estimating how difficult it would be to rank in the top search results for the keyword.
+    Higher values suggest more competition.
+
+-   **CPC (USD):** The average cost-per-click in USD for the keyword in paid search advertising, reflecting the amount advertisers are willing to pay for a click.
+
+-   **Competitive Density:** A metric (0-1) indicating the competitiveness of the keyword in paid search ads, with higher values suggesting more competition.
+
+-   **Number of Results:** The number of search results returned for the keyword, indicating the volume of content indexed by search engines related to that keyword.
+
+-   **Intent:** The search intent behind the keyword, categorizing it as Informational (seeking information), Commercial (intending to make a purchase or evaluate products), or a mix of both.
+
+-   **SERP Features:** Special elements on the search engine results page (SERP) that appear for the keyword, such as site links, reviews, images, video carousels, etc., which can impact visibility and click-through rates.
+
+-   **Trend:** The trend data for the keyword, showing its search volume over time.
+    This is often represented as a series of values (0-1) over different time periods, indicating whether the keyword's popularity is increasing or decreasing.
+
+### Tools
+
+-   **MS Excel**: For initial data exploration and basic calculations.
+
+-   **R and RStudio**: For data processing, analysis, and visualization.
+
+-   **Tableau**: For interactive data visualization and dashboard creation.
+
+-   **DuckDB**: For querying and manipulating large datasets using SQL.
+
+## Data Preparation
+
+### Data Import and Cleaning
+
+We load the CSV data and sanitize the column names to ensure clear naming conventions:
+
+```{r}
+library(dplyr)
+# Explore organic positions for sortitoutsi.net
+# We use `check_names` to deal with colnames like "Traffic %" cleanly
+siosi_organic_positions <- read.csv(file='data/sortitoutsi.net-organic.Positions-uk-20231011-2023-10-12T17_50_37Z.csv', check.names = FALSE)
+# View(siosi_organic_positions)
+
+# Sanitize column headers
+siosi_organic_positions <- siosi_organic_positions |> janitor::clean_names()
+glimpse(siosi_organic_positions)
+View(siosi_organic_positions)
+```
+
+#### Duplicate `keyword` Observations
+
+An initial assumption might be that our organic positions data does not contain duplicate entries in the keyword column, where each keyword would rank uniquely for a respective website.
+Ideally a single URL from a specific site being associated with a unique keyword.
+To validate this assumption, we explore the prevalence of duplicate entries in the keyword column:
+
+```{r}
+# We see a 'clean' 30K rows in the data
+count(siosi_organic_positions)
+# tail(siosi_organic_positions)
+
+# Create a unique set of keywords and count number of dupes
+# unique_siosi_keywords <- unique(siosi_organic_positions$Keyword)
+# tibble(unique_siosi_keywords)
+
+# Find duplicate values in the 'keyword' column
+siosi_keyword_duplicates <- siosi_organic_positions$keyword[duplicated(siosi_organic_positions$keyword)]
+
+
+View(siosi_keyword_duplicates)
+# Get unique duplicates
+siosi_duplicate_counts <- table(siosi_organic_positions$keyword[siosi_organic_positions$keyword %in% siosi_keyword_duplicates])
+
+# Print the vector of duplicates
+View(siosi_duplicate_counts)
+
+```
+
+A single keyword can indeed rank multiple times for the same website, with a total of 727 unique keywords having one or more observations in the SIOSI organic positions dataframe.
+Drilling down into these keywords reveals interesting findings:
+
+```{r}
+
+# Example of a duplicate keyword
+siosi_organic_positions %>%
+  filter(keyword=='fm23 wonderkids')
+```
+
+The keyword `fm23 wonderkids`has two distinct ranking positions (2 and 6), with different URLs and varying values for `traffic` and `traffic_percent`, while sharing identical trend values.
+
+This finding suggests that SEMRush may strip query parameters from URLs, ensuring data security and anonymity.
+This could explain the different ranking positions for the same URL.
+Multiple unique URLs ranking for the same keyword dilute the traffic and traffic_percent values across observations, necessitating a roll-up and summary of this data.
+
+Given our focus on top-ranking keywords, we extract rows with the highest position values for keywords with duplicates:
+
+```{r}
+cleaned_siosi_dupes <- siosi_organic_positions %>%
+  group_by(keyword) %>% # Group on keywords
+  filter(n() > 1) %>%  # If the count of a group is > 1, is a dupe
+  arrange(position, search_volume, traffic) %>% # set our sort criteria 
+  slice_head(n=1) # Retain the highest value
+
+count(cleaned_siosi_dupes)
+unique_cleaned_siosi_dupes <- unique(cleaned_siosi_dupes$keyword)
+
+tibble(unique_cleaned_siosi_dupes)
+```
+
+After extracting the highest-ranking observations for duplicate keywords, we remove all duplicates from the original dataframe:
+
+```{r}
+# Remove duplicates from original dataframe
+siosi_test_df <- siosi_organic_positions %>%
+  filter(!(keyword %in% cleaned_siosi_dupes$keyword))
+
+# count(siosi_test_df)
+# View(unique(siosi_test_df$keyword))
+```
+
+After removing *all* rows of the duplicated keywords in our original dataframe, we need to take our cleaned "duplicate" keyword dataframe and re-insert only the highest-ranking observations back into the original.
+Since we have `cleaned_siosi_dupes` , we can do a simple operation:
+
+```{r}
+# Append the cleaned duplicate dataframe to our original data
+tibble(siosi_test_df)
+tibble(cleaned_siosi_dupes)
+
+# Use rbind to append the cleaned dupes back onto original
+siosi_test_df <- rbind(siosi_test_df, cleaned_siosi_dupes)
+
+# Sanity check the observations add up
+tibble(siosi_test_df)
+tibble(cleaned_siosi_dupes)
+```
+
+In summary:
+
+-   Locate rows in our organic positions dataframe where the `keyword` value is repeated in multiple observations.
+
+-   Extract rows with duplicated keywords, grouping them by `keyword`, and ordering them by `position` value.
+
+-   Within each `keyword` group, we only desire the observation with the highest `position`.
+
+-   Remove all duplicated `keyword` observations from original organic positions dataframe.
+
+-   Insert the highest-ranking observations from the duplicate data back onto the original.
+
+We create a function `remove_keyword_duplicates` to reuse code for this purpose:
+
+```{r}
+tibble(siosi_organic_positions)
+
+cleaned_siosi_organic_positions <- remove_keyword_duplicates(siosi_organic_positions)
+
+tibble(cleaned_siosi_organic_positions)
+```
+
+#### Missing Data
+
+We handle missing data by identifying and omitting observations with missing values:
+
+```{r}
+
+# Omit observations missing data
+cleaned_siosi_organic_positions_no_nas <- na.omit(cleaned_siosi_organic_positions)
+tibble(cleaned_siosi_organic_positions_no_nas)
+```
+
+### Data Consolidation
+
+#### Organic Positions
+
+To compare keyword position data across multiple competitor sites, we need to extract and consolidate the information from different files into a singular dataframe.
+Our scope for this analysis is focused on organic position data, but there are various assets in the fuller dataset relating to trends, backlinks, and gap keywords.
+We can enable simple filtering and data import via glob patterns.
+We create a list of competitors in a vector to efficiently process data files via glob patterns:
+
+```{r}
+# Create a list of competitors. Use this vector to efficiently
+# process data files via glob patterns.
+list_of_competitors <- c("fm-base", "fminside.net",  "fmscout.com","footballmanagerblog.org", "passion4fm")
+```
+
+We can now efficiently load in all of the competitor data using the `load_competitor_data` function and appropriate file matching pattern.
+In this case we use `organic.Positions` as our pattern:
+
+```{r}
+library(purrr)
+# Specify the file pattern interesting us
+positions_file_pattern <- "organic.Positions"
+
+# Use map to iterate over competitors and apply the load function
+positions_data_list <- map(list_of_competitors, ~ load_competitor_data(.x, positions_file_pattern))
+
+# Name the list with the competitor names for easier access
+names(positions_data_list) <- list_of_competitors
+```
+
+We access each dataframe easily using the respective competitor name used in `list_of_competitors`:
+
+```{r}
+# Validate the names of the dataframes match our site names
+names(positions_data_list)
+
+fminside_net_positions_df <- positions_data_list[["fminside.net"]]
+View(fminside_net_positions_df)
+
+```
+
+We sanitize column names and create some dataframes for convenience:
+
+```{r}
+# Use lapply to sanitize column names inside the data frame
+positions_data_list <- lapply(positions_data_list, janitor::clean_names)
+
+# Iterate over our list of competitors to mutate the dataframes. We will
+# add a column called site_name to identify the observations.
+for (site_name in list_of_competitors){
+  positions_data_list[[site_name]] <- positions_data_list[[site_name]] %>%
+    mutate(site_name = site_name)
+}
+```
+
+```{r}
+# Create data frames for all competitors for convenience
+fminside_net_positions_df <- positions_data_list[["fminside.net"]]
+fmscout_com_positions_df <- positions_data_list[["fmscout.com"]]
+passion4fm_positions_df <- positions_data_list[["passion4fm"]]
+fm_base_positions_df <- positions_data_list[["fm-base"]]
+footballmanagerblog_org_positions_df <- positions_data_list[["footballmanagerblog.org"]]
+
+head(fm_base_positions_df, n=2)
+```
+
+With our dataframes for each competitor updated to have a `site_name` column, we do the same for Sortitoutsi.net's data:
+
+```{r}
+siosi_organic_positions_new_df <- siosi_organic_positions %>%
+  mutate(site_name = "sortitoutsi.net")
+# head(siosi_organic_positions_new_df, n=1)
+
+# With all dataframes having the added column we consolidate into a
+# single dataframe, and can now filter on the individual website
+
+# Start with Sortitoutsi.net populating the full organic positions df
+all_sites_organic_positions <- siosi_organic_positions_new_df
+
+# Iterate over every site in our list of competitors and append the rows
+for (site_name in list_of_competitors){
+  all_sites_organic_positions <- rbind(all_sites_organic_positions, positions_data_list[[site_name]] )
+}
+
+tibble(all_sites_organic_positions)
+
+unique(all_sites_organic_positions$site_name)
+```
+
+#### CSV Export and duckdb
+
+We export the consolidated Organic Positions data frame to CSV.
+This will enable analysis in other tools, such as MS Excel and Tableau:
+
+```{r}
+write.csv(all_sites_organic_positions, file = "./data/all_organic_positions.csv", fileEncoding = "utf8", )
+```
+
+We write the Organic Positions data into a `duckdb` database to enable SQL query syntax to glean insights:
+
+```{r}
+# Create a connection to an in-memory DuckDB database
+con <- dbConnect(duckdb::duckdb(), dbdir = "./data/organic-positions-render.duckdb", read_only = FALSE)
+
+dbWriteTable(con,"organic_positions", all_sites_organic_positions, overwrite = TRUE)
+```
+
+A test query to validate functionality by grabbing the keywords with highest `search_volume`.
+
+```{r}
+res <- dbGetQuery(con, "
+  SELECT 
+    *
+  FROM 
+    organic_positions AS op
+  ORDER BY search_volume DESC
+  LIMIT 3
+  ")
+print(res)
+```
+
+## Keyword Categorization
+
+### High Ranking Keywords
+
+We identify the keywords that Sortitoutsi.net ranks highly for using the cleaned organic positions data:
+
+```{r}
+
+siosi_organic_positions_1 <- cleaned_siosi_organic_positions_no_nas %>%
+  filter(position == 1) %>% # Seek out top ranking keywords
+  arrange(desc(search_volume)) %>%
+  arrange(desc(cpc))
+
+# Glance at all keywords that have rank of 1
+# tibble(siosi_organic_positions_1)
+# View(siosi_organic_positions_1)
+
+# Get top 100 keywords. Use `slice_max` to tiebreak
+top_100_siosi_organic_positions_1 <- siosi_organic_positions_1 %>%
+  arrange(desc(search_volume), desc(cpc)) %>%
+  slice_max(order_by = search_volume, n = 100, with_ties = FALSE)
+  
+# tibble(top_100_siosi_organic_positions_1)
+# View(top_100_siosi_organic_positions_1)
+# print(top_100_siosi_organic_positions_1)
+
+# Top 50 keywords
+top_50_siosi_organic_positions_1 <- head(top_100_siosi_organic_positions_1, 50)
+
+# Top 25 keywords
+top_25_siosi_organic_positions_1 <- head(top_50_siosi_organic_positions_1, 25)
+View(table(top_25_siosi_organic_positions_1$keyword))
+# print(top_25_siosi_organic_positions_1$keyword)
+print(top_50_siosi_organic_positions_1$keyword)
+```
+
+### Creating Keyword Categories
+
+To enhance our analysis, we categorize keywords for further exploration.
+We enlisted the help of ChatGPT to create a basic categorization framework, which was then applied to our data.
+We presented the 100 keywords in a prompt and asked for ChatGPT to logically group the keywords, while bearing in mind Sortitousi.net's purpose and target audience.
+
+```{r}
+top_100_keywords_only <- top_100_siosi_organic_positions_1$keyword
+categorized_top_100_keywords <- categorize_keywords(top_100_keywords_only)
+
+```
+
+Since ChatGPT lacks Football Manager domain knowledge, we manually checked and cleaned inaccurate data:
+
+```{r}
+
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "brianza fm23", "Clubs & Leagues"] <- 1
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "best youth academies fm23", "Clubs & Leagues"] <- 1
+
+
+# Data updates are "game assets"
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "fm23 data update", "Game Assets"] <- 1
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "fm23 logo", "Game Assets"] <- 1
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "fm23 updated database", "Game Assets"] <- 1
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "fm23 badges", "Game Assets"] <- 1
+
+# Typos for the site name
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "sortitotsi", "Brand & Identity"] <- 1
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "sortit out", "Brand & Identity"] <- 1
+
+# Misspelled wonderkids
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "jobe belingham", "Wonderkids & Best Players"] <- 1
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "jobe belingham", "Player Stats & Profiles"] <- 1
+
+# View the modified row (optional)
+categorized_top_100_keywords[categorized_top_100_keywords$Keyword == "brianza fm23", ]
+```
+
+A barplot of the top 100 keywords categorized:
+
+```{r}
+# Load necessary libraries
+# library(ggplot2)
+# library(tidyr)
+
+# Summarize the data by counting the number of keywords in each category
+category_counts <- colSums(categorized_top_100_keywords[,-1])
+
+# Convert the summarized data into a dataframe for plotting
+category_counts_df <- data.frame(
+  Category = names(category_counts),
+  Count = as.numeric(category_counts)
+)
+
+# View the summarized data (optional)
+print(category_counts_df)
+
+
+
+# Create a bar plot with flipped axes
+p <- ggplot(category_counts_df, aes(x = reorder(Category, Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Top 100 Ranking Keywords",
+    x = "Category",
+    y = "Count"
+  ) +
+  coord_flip() +  # Flip the axes
+  theme_minimal()
+
+# Convert to an interactive plot using ggplotly
+p_interactive <- ggplotly(p)
+
+# Display the interactive plot
+p_interactive
+
+```
+
+#### Keyword Lists
+
+```{r}
+
+
+game_assets_keywords <- categorized_top_100_keywords %>%
+  filter(`Game Assets` == 1) %>%
+  select(Keyword)
+
+wonderkids_keywords <- categorized_top_100_keywords %>%
+  filter(`Wonderkids & Best Players` == 1) %>%
+  select(Keyword)
+
+player_stats_keywords <- categorized_top_100_keywords %>%
+  filter(`Player Stats & Profiles` == 1) %>%
+  select(Keyword)
+
+clubs_leagues_keywords <- categorized_top_100_keywords %>%
+  filter(`Clubs & Leagues` == 1) %>%
+  select(Keyword)
+
+tactics_keywords <- categorized_top_100_keywords %>%
+  filter(`Tactics & Formations` == 1) %>%
+  select(Keyword)
+
+brand_identity_keywords <- categorized_top_100_keywords %>%
+  filter(`Brand & Identity` == 1) %>%
+  select(Keyword)
+
+```
+
+##### Game Assets
+
+```{r}
+print(game_assets_keywords)
+```
+
+##### Wonderkids & Best Players
+
+```{r}
+print(wonderkids_keywords)
+```
+
+##### Player Stats & Profiles
+
+```{r}
+print(player_stats_keywords)
+```
+
+##### Clubs & Leagues
+
+```{r}
+print(clubs_leagues_keywords)
+```
+
+##### Tactics & Formations
+
+```{r}
+print(tactics_keywords)
+```
+
+##### Brand & Identity
+
+```{r}
+print(brand_identity_keywords)
+```
+
+##### Filtering Dataframe List
+
+We create a list of dataframes to reuse as we analyze various aspects of search volume, traffic, and CPC:
+
+```{r}
+# Example list of dataframes to filter against
+filter_dfs <- list(
+  "Game Assets" = game_assets_keywords,
+  "Wonderkids" = wonderkids_keywords,
+  "Tactics" = tactics_keywords, 
+  "Player Stats" = player_stats_keywords,
+  "Clubs & Leagues" = clubs_leagues_keywords,
+  "Brand Identity" = brand_identity_keywords
+)
+```
+
+#### SERP Features
+
+SERP Features describes element of a Search Engine Results Page (SERP) that are not traditional search results.
+These additional items can include paid results, video carousels, image packs, and so on.
+
+```{r}
+# Copy the entire data set
+my_serp_test <- siosi_organic_positions
+
+# Split the `serp_features_by_keyword` column
+# Extract the unique features
+serp_split <- strsplit(siosi_organic_positions$serp_features_by_keyword, ", ")
+unique_serp_features <- unique(unlist(serp_split))
+
+# Sanitize the names
+clean_names <- gsub(" ", "_", tolower(unique_serp_features))
+clean_names <- gsub("-", "_", clean_names) # Replace any other special characters if needed
+
+serp_df <- do.call(rbind, lapply(serp_split, function(x) {
+  setNames(as.integer(clean_names %in% tolower(x)), clean_names)
+}))
+
+my_serp_test <- cbind(my_serp_test, serp_df)
+
+# The new dataframe has all original data and column for SF
+View(head(my_serp_test))
+```
+
+With this new dataframe with columns needed to categorize keywords, let's see if we can get a sense of the most utilized SERP Features on the highest ranking pages:
+
+```{r,warning: false, message: false}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+# We will extract the rows from our SF enabled dataframe
+# from previous work
+my_serp_sample <- my_serp_test %>%
+  filter(keyword %in% top_50_siosi_organic_positions_1$keyword)
+
+# Take our sample df, and calculate sums for the SF columns
+serp_features_totals <- my_serp_sample %>%
+  select(all_of(clean_names)) %>%  # Select columns that match 'clean_names'
+  summarise(across(everything(), \(x) sum(x, na.rm = TRUE)))  # Sum the values across these columns
+ 
+
+# Step 2: Find the top 5 SERP features by quantity
+top_5_serp_features <- serp_features_totals %>%
+  pivot_longer(cols = everything(), names_to = "SERP_Feature", values_to = "Total") %>%
+  arrange(desc(Total)) %>%
+  slice_head(n = 5)
+
+# Output the top 5 SERP features
+print(top_5_serp_features)
+
+
+
+# Filter the original dataframe to include only the top 5 SERP features columns
+df_top_5_serp <- my_serp_sample %>%
+  select(all_of(top_5_serp_features$SERP_Feature))
+
+
+# Summarize the data by counting the occurrences of the top 5 SERP features
+serp_heatmap_data <- df_top_5_serp %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+# Convert to long format for the heatmap
+serp_heatmap_long <- serp_heatmap_data %>%
+  pivot_longer(cols = everything(), names_to = "SERP_Feature", values_to = "Count")
+
+# Create the heatmap
+serp_heatmap_test <-ggplot(serp_heatmap_long, aes(x = SERP_Feature, y = "Keyword", fill = Count)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Heatmap of Top 5 SERP Features",
+       x = "SERP Feature",
+       y = "",
+       fill = "Count") +
+  theme_minimal()
+
+# Create the barplot
+serp_barplot <- ggplot(top_5_serp_features, aes(x = reorder(SERP_Feature, Total), y = Total)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Top SERP Features - Top 50 keywords",
+       x = "SERP Feature",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()
+
+# Display the plot
+ggplotly(serp_barplot)
+
+# Convert the relevant columns to long format for the heatmap
+serp_heatmap_long <- my_serp_sample %>%
+  select(keyword, all_of(top_5_serp_features$SERP_Feature)) %>%
+  pivot_longer(cols = -keyword, names_to = "SERP_Feature", values_to = "Count") %>%
+  filter(Count > 0)  # Keep only rows where the feature is present
+
+# Generate the heatmap so we can sense if there is overlap
+ggplot(serp_heatmap_long, aes(x = SERP_Feature, y = keyword, fill = Count)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Heatmap of Top 5 SERP Features by Keyword",
+       x = "SERP Feature",
+       y = "Keyword",
+       fill = "Presence (1)") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8))  # Adjust size if necessary
+
+```
+
+#### Search Intent
+
+Search Intent is the prinicple underlying keyword research.
+It is the underlying motive for the questions users ask and the answers they are seeking.
+Search Intent is generally broken down into the follow categories, each category mapping to a particular strata of the traditional "Sales Funnel":
+
+-   Navigational - Users looking for a specific site and/or page
+-   Informational - Research, curiosity
+-   Commercial - Seeking information for a purchase
+-   Transactional - Actively shopping, ready to pay with a card
+
+As Sortitoutsi.net may not be relying upon a "transactional" intent from searches, we have chosen "informational" queries as the central priority to our analysis efforts.
+A challenge is to utilize and interpret the keywords Sortitoutsi.net ranks for as a proxy for search intent, and how well the keywords align with content and information provided by the site.
+
+## Keyword Performance Analysis
+
+### Keyword Difficulty and Search Volume
+
+#### Search Volume
+
+We visualize the search volume for each category:
+
+```{r}
+# Summarize and plot Search Volume
+summarize_and_plot(filter_dfs, top_100_siosi_organic_positions_1, "search_volume")
+
+```
+
+This analysis shows that "Sortitoutsi.net" is the most searched category, surpassing more targeted searches for Game Assets and Wonderkids.
+This indicates a strong brand presence.
+
+With the top 100 keywords known, we explore if there is relationship between the `keyword_difficulty` and the `search_volume` for a topic.
+We want to reveal if high difficulty keywords have high value of search volume:
+
+```{r}
+# Calculate the correlation coefficient 
+correlation <- cor(top_100_siosi_organic_positions_1$keyword_difficulty,  top_100_siosi_organic_positions_1$search_volume,  use = "complete.obs")
+
+# Print the correlation coefficient
+print(paste("Correlation between Keyword Difficulty and Search Volume:",  correlation))
+
+# Create a scatter plot with a trend line
+kd_volume_plot <- ggplot(top_100_siosi_organic_positions_1,  aes(x = keyword_difficulty ,  y = search_volume,  text = paste("Keyword:",  keyword,  "<br>Volume:",  search_volume))) +
+  geom_point(color = "blue",  alpha = 0.6) +  # Scatter plot points
+  # geom_smooth(method = "lm",  color = "red",  se = FALSE) +  # Trend line (linear model)
+  labs(title = "Relationship Between Keyword Difficulty and Search Volume", 
+       x = "Keyword Difficulty", 
+       y = "Search Volume") +
+  theme_minimal()
+
+kd_volume_plot<- ggplotly(kd_volume_plot,  tooltip = "text")
+kd_volume_plot
+```
+
+There is weak positive correlation between `keyword_difficulty` and `search_volume`, the plot showing nearly all observations lying below the 1000 count for `search_volume`, no matter the range of `keyword_difficulty`.
+
+#### Inbound Traffic
+
+Next, we examine how much `traffic` is driven by our top-ranking keywords, broken down by category:
+
+```{r}
+
+# Summarize and plot Traffic
+summarize_and_plot(filter_dfs, top_100_siosi_organic_positions_1, "traffic")
+
+```
+
+Large amounts of inbound site traffic in the `Brand & Identity` category speak deeply to Sortioutsi.net having high domain authority relating to Football Manager downloadable content.
+Providing assets such as face packs, logo packs, and kits, implies a user search intent for deep customization, realism, and enhancement of their gaming experience.
+This also reinforces the ability of Sortitoutsi.net to maintain steady incoming web traffic throughout all aspects of the game's release cycle.
+
+#### Search Volume Impact on Inbound Traffic
+
+We explore the relationship between search volume and inbound traffic:
+
+```{r}
+
+# Initialize an empty dataframe to store results
+result_df <- data.frame(
+  Category = character(),
+  Total_Search_Volume = numeric(),
+  Total_Traffic = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Loop over the list of dataframes and summarize both search_volume and traffic
+for (df_name in names(filter_dfs)) {
+  # Get the current dataframe
+  df <- filter_dfs[[df_name]]
+  
+  # Filter and summarize the search_volume and traffic
+  summary <- top_100_siosi_organic_positions_1 %>%
+    filter(keyword %in% df$Keyword) %>%
+    summarize(
+      Total_Search_Volume = sum(search_volume, na.rm = TRUE),
+      Total_Traffic = sum(traffic, na.rm = TRUE)
+    )
+  
+  # Append the results to the result_df dataframe
+  result_df <- rbind(result_df, data.frame(Category = df_name, summary))
+}
+
+# Reshape the dataframe to long format for the grouped barplot
+long_df <- result_df %>%
+  pivot_longer(cols = c(Total_Search_Volume, Total_Traffic), 
+               names_to = "Metric", 
+               values_to = "Value")
+
+# Reorder the Metric factor levels to control the display order
+long_df$Metric <- factor(long_df$Metric, levels = c( "Total_Traffic", "Total_Search_Volume"))
+
+# Generate the grouped barplot, ensuring the correct order within each group
+stacked_volume_traffic_plot <- ggplot(long_df, aes(x = reorder(Category, Value), y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  coord_flip() +
+  labs(title = "Total Search Volume and Traffic by Keyword Category",
+       x = "Keyword Category",
+       y = "") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Total_Search_Volume" = "steelblue", "Total_Traffic" = "darkgoldenrod"))
+
+stacked_volume_traffic_plot<- ggplotly(stacked_volume_traffic_plot)
+stacked_volume_traffic_plot
+
+```
+
+The `Brand & Identity` category is the most efficient in converting searches into actual site traffic.
+
+#### Search Efficiency
+
+To determine ratio of traffic received compared to search volume, we create a table displaying how efficiently Search Volume translate to inbound site traffic:
+
+```{r}
+# Create an efficiency table
+# Initialize an empty dataframe to store results
+result_df <- data.frame(
+  Category = character(),
+  Total_Search_Volume = numeric(),
+  Total_Traffic = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Loop over the list of dataframes and summarize both search_volume and traffic
+for (df_name in names(filter_dfs)) {
+  # Get the current dataframe
+  df <- filter_dfs[[df_name]]
+  
+  # Filter and summarize the search_volume and traffic
+  summary <- top_100_siosi_organic_positions_1 %>%
+    filter(keyword %in% df$Keyword) %>%
+    summarize(
+      Total_Search_Volume = sum(search_volume, na.rm = TRUE),
+      Total_Traffic = sum(traffic, na.rm = TRUE)
+    )
+  
+  # Append the results to the result_df dataframe
+  result_df <- rbind(result_df, data.frame(Category = df_name, summary))
+}
+
+# We add a new column calculating the search efficiency.
+result_df <- result_df %>%
+  mutate( Search_Efficiency_Percentage = signif((Total_Traffic/Total_Search_Volume ) * 100, digits = 3))
+
+print(result_df %>%
+        select(Category, Search_Efficiency_Percentage) %>%
+        arrange(desc(Search_Efficiency_Percentage))
+      )
+
+```
+
+#### CPC Analysis
+
+The CPC value of keywords Sortitoutsi.net ranks for can provide insight into the domain's effectiveness in attracting organic traffic that interests advertisers.
+We examine keywords with CPC values and calculate the potential monthly revenue:
+
+```{r}
+# Summarize and plot CPC
+summarize_and_plot(filter_dfs, top_100_siosi_organic_positions_1, "cpc",format_usd = TRUE)
+```
+
+With only two categories to choose from, we find what keywords have CPC, as well as calculate the nominal monthly revenue these keywords have in value:
+
+```{r}
+top_100_keywords_with_cpc <- top_100_siosi_organic_positions_1 %>%
+  filter( cpc > 0) %>%
+  select(keyword,cpc, search_volume, traffic)
+
+head(top_100_keywords_with_cpc)
+```
+
+With traffic numbers only in double digits, we can suss out the dollar amount easily:
+
+```{r}
+top_100_keywords_with_cpc <- top_100_keywords_with_cpc %>%
+  mutate(monthly_revenue = traffic * cpc)
+
+print(top_100_keywords_with_cpc)
+
+top_100_keywords_with_cpc %>%
+  summarize(sum(monthly_revenue))
+```
+
+The three keywords in the top 100 ranking keywords with positive CPC value are responsible for saving **\$452** in advertising budget due to Sortitoutsi.net's organic search results.
+
+To get a deeper sense of possible CPC value add, we will look at the overarching data set for any potential topics Sortitoutsi.net could explore.
+As there are thousands of keywords to choose from, we will revisit the *entire* list of all keywords that Sortioutsi.net ranks for, data set, focusing on all keywords with ranking `position` less than or equal to 15.
+Keywords within this range present a decent opportunities to rank higher in search results with minimal starting effort:
+
+```{r}
+# Grab the original set of cleaned keywords
+total_keywords_with_cpc <- cleaned_siosi_organic_positions_no_nas %>%
+  filter(cpc > 0) %>% # We want CPC values 
+  filter(position <16) %>%  # We want higher value keywords
+  select(keyword, position, cpc, traffic ) %>% 
+  arrange(position, desc(cpc), desc(traffic))  # We prioritize position, cpc, value, then traffic amount
+
+# Calculate monthly revenue
+total_keywords_with_cpc <- total_keywords_with_cpc %>%
+  mutate(monthly_revenue = cpc * traffic)
+
+tibble(total_keywords_with_cpc)
+sum(total_keywords_with_cpc$monthly_revenue)
+```
+
+A new Football Manager community website attempting to break into the Football Manager content space, who would want to attract the same types of traffic in a paid sense, would have to spend **\$7487.92** per month in paid Google advertisements to have the same organic traffic currently on Sortitoutsi.net, for this set of keywords.
+Amazing!
+This sounds great, but may not be completely accurate.
+We should look more closely at the keywords to see if they exhibit search intent relevant to Sortitoutsi.net generally.
+
+```{r}
+total_keywords_with_cpc$keyword
+```
+
+With this in mind, we sorted the keywords and assigned them to our keyword categorizations, and then create a dataframe reflecting these:
+
+```{r}
+categories <- c("Wonderkids & Best Players", "Tactics & Formations", "Game Assets", "Player Stats & Profiles", "Clubs & Leagues", "Brand & Identity")
+
+counts <- c(25, 15, 20, 10, 5, 8)
+
+# Creating the dataframe
+cpc_category_counts <- data.frame(
+  Category = categories,    # This creates a column called 'Category'
+  Count = counts            # This creates a column called 'Count'
+)
+
+# Print the dataframe to see the result
+tibble(category_counts)
+
+# Plot the data 
+cpc_category_plot <- ggplot(category_counts_df, aes(x = reorder(Category, Count), y =Count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Positive CPC Keywords",
+       x = "Category",
+       y = "Count") +
+  theme_minimal()
+
+cpc_category_plot <- ggplotly(cpc_category_plot)
+cpc_category_plot
+```
+
+To obtain an estimated monthly revenue breakdown of how value each category can be from a CPC-earning perspective, we use some vectors to create lists of keywords.
+We will then categorize the CPC positive words an compute this:
+
+```{r}
+# Create vectors of CPC-earning keywords
+# Wonderkids & Best Players
+wonderkids_best_players_cpc <- c(
+  "best teams to manage fm23", "football manager 2023 wonderkids cheap", 
+  "best strikers fm23", "best fm23 strikers", "fm23 wonderlids", 
+  "fm23 defender wonderkids", "best young strikers football manager 2023", 
+  "fm23 best strikers", "wonderkids on football manager", 
+  "football manager 2023 wonderkids", "football manager 23 wonderkids", 
+  "football manager wonderkids", "best keepers fm23", "fm wonderkids", 
+  "best young players football manager 2023", "best strikers to sign fm23", 
+  "best young players fm23", "football manager best wonderkids", 
+  "best players fm23", "fm23 best players", "football manager 2023 best players", 
+  "best fm23 players", "best loan players fm23", "kobbie mainoo fm22", 
+  "kobbie mainoo fm23", "job bellingham"
+)
+
+# Tactics & Formations
+tactics_formations_cpc <- c(
+  "football manager 2023 mobile tactics", "best tactic fm 23", 
+  "best football manager tactics", "football manager 2023 tactics", 
+  "best tactics fm23", "fm 23 best tactics", "fm23 ps5 tactics", 
+  "best fm23 tactic", "fm 23 best tactic", "fm 23 tactics", 
+  "fm23 tactic", "fm mobile 23 tactics", "fm23 tatics", 
+  "best tactic fm23", "fm23 tactics"
+)
+
+# Game Assets
+game_assets_cpc <- c(
+  "fm23 custom database", "fmskins", "facepack", 
+  "fm kit creator", "metallic logo", "cut out faces", 
+  "skin football"
+)
+
+# Player Stats & Profiles
+player_stats_profiles_cpc <- c(
+  "linfield f c", "job bellingham", "kobbie mainoo fm22", 
+  "kobbie mainoo fm23"
+)
+
+# Clubs & Leagues
+clubs_leagues_cpc <- c(
+  "mls teams 2023", "mls 2023", "sky bet league 1", 
+  "sky bet league 2", "sky bet champ", "skybet league 1"
+)
+
+# Brand & Identity
+brand_identity_cpc <- c(
+  "fmbase", "fmenhanced", "fm-base", 
+  "football manager forum", "football manager forums", 
+  "workthespace", "football manager retro", 
+  "football manager apple arcade", "recoe"
+)
+
+# After defining the lists we will summary the potential CPC per category
+# View(total_keywords_with_cpc)
+# total_keywords_with_cpc %>%
+#  filter(keyword %in% brand_identity_cpc)
+
+
+cpc_result_df <- data.frame(
+    Category = character(),
+    Total_Sum = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+
+# Example list of dataframes to filter against
+cpc_filter_dfs <- list(
+  "Wonderkids" = wonderkids_best_players_cpc, 
+  "Tactics" = tactics_formations_cpc,
+  "Game_Assets" = game_assets_cpc,
+  "Player_Stats" = player_stats_profiles_cpc,
+  "Clubs_Leagues" = clubs_leagues_cpc,
+  "Brand_Identity" = brand_identity_cpc
+)
+
+# Loop over the list of dataframes
+for (df_name in names(cpc_filter_dfs)) {
+  # Get the current dataframe
+  df <- cpc_filter_dfs[[df_name]]
+  
+  # Filter and summarize the target column
+  cpc_total_sum <- total_keywords_with_cpc %>%
+    filter(keyword %in% df) %>%
+    summarize(Total_Sum = sum(cpc * traffic, na.rm = TRUE)) %>%
+    pull(Total_Sum)
+  
+  # Append the results to the result_df dataframe
+  cpc_result_df <- rbind(cpc_result_df, data.frame(Category = df_name, Total_Sum = cpc_total_sum))
+}
+
+# Loop over the list of dataframes
+for (df_name in names(cpc_filter_dfs)) {
+  # Get the current dataframe
+  df <- cpc_filter_dfs[[df_name]]
+}
+
+
+tibble(cpc_result_df)
+
+# Plot the data 
+total_cpc_categorized_plot <- ggplot(cpc_result_df, aes(x = reorder(Category, Total_Sum), y = Total_Sum)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Total Monthly CPC per Category: Ranking <= 15",
+       subtitle = "Ranking Position <= 15",
+       x = "Category",
+       y = "Total Sum") +
+  # annotate("text", x = Inf, y = Inf, label = "Ranking Position <= 15", hjust = 1.1, vjust = 2, size = 3, color = "black") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::dollar_format(prefix = "$", suffix = "")) +
+  theme(plot.margin = unit(c(1, 1, 1, 1), "lines"))
+
+# total_cpc_categorized_plot
+total_cpc_categorized_plot <- ggplotly(total_cpc_categorized_plot)
+total_cpc_categorized_plot
+
+```
+
+For keywords that Sortitoutsi.net ranks for, whose search ranking positions are between 1 and 15, we observe the highest cumulative monthly CPC value for the categories of `Wonderkids` (\$3970) and `Tactics` (\$2463).
+
+## URL Analysis
+
+### Top Ranking URLs
+
+```{r}
+urls_for_top_100_keywords <- top_100_siosi_organic_positions_1 %>%
+  select(url)
+
+print(urls_for_top_100_keywords)
+unique(urls_for_top_100_keywords)
+```
+
+There are only 42 unique URLs associated with our top 100 keywords, indicating significant overlap:
+
+```{r}
+# Count the number of keywords associated with each unique URL
+url_keyword_count <- top_100_siosi_organic_positions_1 %>%
+  group_by(url) %>%
+  summarize(keyword_count = n()) %>%
+  arrange(desc(keyword_count))
+tibble(url_keyword_count)
+```
+
+We explore how the URLs map to our designated keyword categories:
+
+```{r}
+# Join the top 100 keywords with their categories
+categorized_data <- top_100_siosi_organic_positions_1 %>%
+  left_join(categorized_top_100_keywords, by = c("keyword" = "Keyword"))
+
+# Count the number of URLs associated with each category
+category_url_count <- categorized_data %>%
+  pivot_longer(cols = c(`Clubs & Leagues`, `Tactics & Formations`, `Wonderkids & Best Players`, 
+                        `Player Stats & Profiles`, `Game Assets`, `Brand & Identity`), 
+               names_to = "Category", 
+               values_to = "Value") %>%
+  filter(Value == 1) %>%  # Keep only rows where the category is 1
+  group_by(Category) %>%
+  summarize(Unique_URLs = n_distinct(url))
+
+# Create the barplot
+category_url_plot <- ggplot(category_url_count, aes(x = reorder(Category, Unique_URLs), y = Unique_URLs)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Number of URLs Associated with Each Keyword Category",
+       x = "Keyword Category",
+       y = "Number of Unique URLs") +
+  theme_minimal()
+
+category_url_plot<- ggplotly(category_url_plot)
+category_url_plot
+```
+
+We create a heatmap to visualize how these URLs map to different keyword categories:
+
+```{r warning=FALSE}
+# Create a heatmap showing the relationship between URLs and Categories
+url_category_heatmap_data <- categorized_data %>%
+  pivot_longer(cols = c(`Clubs & Leagues`, `Tactics & Formations`, `Wonderkids & Best Players`, 
+                        `Player Stats & Profiles`, `Game Assets`, `Brand & Identity`), 
+               names_to = "Category", 
+               values_to = "Value") %>%
+  filter(Value == 1) %>%
+  group_by(url, Category) %>%
+  summarize(Keyword_Count = n())
+
+new_url_cat_heatmap_data <- url_category_heatmap_data %>%
+  filter(Keyword_Count > 2)
+# Create the heatmap
+url_heatmap_plot <- ggplot(new_url_cat_heatmap_data, aes(x = Category, y = reorder(url, Keyword_Count), fill = Keyword_Count)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(title = "URLs With > 2 Keywords",
+       x = "Keyword Category",
+       y = "URL") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplotly(url_heatmap_plot)
+```
+
+We can see some overlap between `Tactics & Formations` along with `Wonderkids & Best Players`.
+Similarly, for URL containing `Jobe Bellingham`, we see overlap between \``Wonderkids & Best Players` , and `Player Stats and Profiles`.
+The heatmap also makes the strongest impression of what URLs have rankings for multiple keywords; notably `logos` and `cut-out-player-faces` in the URLs.
+We can validate this from our previous work:
+
+```{r}
+print(head(url_keyword_count, 10))
+```
+
+### URL Traffic Efficiency
+
+With the 42 unique URLs in mind, we determine which *particular* URLs for the top 100 keywords Sortitoutsi.net ranks for have the highest amounts of inbound traffic:
+
+```{r}
+library(ggplot2)
+library(plotly)
+# Count the number of keywords associated with each unique URL
+url_search_and_traffic <- top_100_siosi_organic_positions_1 %>%
+  select(url, search_volume, traffic) %>% # Pick desired
+  arrange(desc(traffic)) %>% # We want the highest traffic first
+  group_by(url) %>% # Group URL
+  # Calculate sum for all the observations for a unique URL
+  summarize(total_traffic = sum(traffic)) %>% 
+  arrange(desc(total_traffic))
+
+
+tibble(url_search_and_traffic)
+
+top_url_search_and_traffic <- url_search_and_traffic %>%
+  arrange(desc(total_traffic)) %>%
+  slice_head(n=10)
+
+tibble(top_url_search_and_traffic)
+
+# Create the barplot
+url_traffic_plot <- ggplot(top_url_search_and_traffic, aes(y = total_traffic, x = reorder(url, total_traffic))) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Highest Inbound Traffic",
+       x = "Traffic",
+       y = "URL") +
+  theme_minimal()
+
+url_traffic_plot<- ggplotly(url_traffic_plot)
+url_traffic_plot
+
+# Create the barplot
+url_traffic_plot <- ggplot(slice_tail(top_url_search_and_traffic, n=9), aes(y = total_traffic, x = reorder(url, total_traffic))) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Homepage removed",
+       x = "URL",
+       y = "Traffic") +
+  theme_minimal() 
+
+url_traffic_plot<- ggplotly(url_traffic_plot)
+url_traffic_plot
+
+```
+
+We calculate average amount of `traffic` we can expect for each URL:
+
+```{r}
+tibble(categorized_data)
+
+# Create a heatmap showing the relationship between URLs and Categories
+url_traffic_cat_heatmap_data <- categorized_data %>%
+  pivot_longer(cols = c(`Clubs & Leagues`, `Tactics & Formations`, `Wonderkids & Best Players`, 
+                        `Player Stats & Profiles`, `Game Assets`, `Brand & Identity`), 
+               names_to = "Category", 
+               values_to = "Value") %>%
+  filter(Value == 1) %>%
+  group_by(Category) %>%
+  summarize(Total_Category_Traffic = sum(traffic))
+
+# We have total traffic amounts per category
+tibble(url_traffic_cat_heatmap_data)
+
+# We have URL counts per category
+tibble(category_url_count)
+
+# Use dplyr to combine into single df
+merged_traffic_and_url <- left_join(url_traffic_cat_heatmap_data, category_url_count, by = "Category")
+
+merged_traffic_and_url<- merged_traffic_and_url %>%
+  mutate(avg_traffic_per_url  = Total_Category_Traffic / Unique_URLs)
+
+tibble(merged_traffic_and_url)
+```
+
+## Competitive Analysis
+
+### Top Competitor Keywords
+
+We first want to see what keywords our competitors rank highly for:
+
+```{r}
+library(glue)
+
+# Create duck db query function
+# Function to load the data
+query_top_organic_positions <- function(con, site_name, limit = 5) {
+
+  query <- glue_sql(
+    "SELECT
+      op.site_name,
+      op.keyword as keyword,
+
+      op.search_volume AS search_volume,
+      op.traffic AS traffic, 
+      op.cpc AS cpc
+    FROM 
+      organic_positions AS op
+    WHERE position = '1' AND site_name = {site_name}
+    AND op.keyword NOT like 'sort%si%'
+    AND op.keyword NOT like 'fm%scout%'
+    AND op.keyword NOT like 'fm%base%'
+    AND op.keyword NOT like 'fm%inside%'
+    AND op.keyword NOT like 'passion4fm%'
+    ORDER BY search_volume DESC, traffic DESC, cpc DESC
+    LIMIT {limit}
+  ", .con = con)
+  result <- dbGetQuery(con, query)
+  return(result)
+
+}
+
+```
+
+```{r}
+
+# Initialize with sortitoutsi.net
+my_site_name = 'sortitoutsi.net'
+top_org_positions_all_sites = query_top_organic_positions(con, my_site_name)
+
+
+# Iterate over every site in our list of competitors and append the rows to results df
+for (site_name in list_of_competitors){
+  top_org_positions_all_sites <- rbind(top_org_positions_all_sites, query_top_organic_positions(con,site_name) )
+}
+print(top_org_positions_all_sites)
+```
+
+### Analysis of Sortitoutsi.net's Top 5 keywords {#keyword-cannibalization}
+
+For each of the top keywords located for Sortitoutsi.net, we searched for the same term using "Incognito" mode in three different search engines:
+
+-   Microsoft Bing
+
+-   Google Search
+
+-   DuckDuckGo
+
+We want to clarify if the top ranking keywords at the time of the SEMRush data snapshot have fallen in ranking position.
+
+| Top Keywords          | Bing | Google Search | DuckDuckGo |
+|-----------------------|------|---------------|------------|
+| fm23 logo pack        | 6    | 4             | 8          |
+| fm23 facepack         | 3    | 4             | 4          |
+| fm23 cheap wonderkids | 4    | 2             | 4          |
+| fm23 kits             | 2    | 1, 3          | 1          |
+| fm23 facepack         | 3    | 4             | 3          |
+
+: Current Ranking Positions of Sortitoutsi.net Top Keywords
+
+Our findings on the ranking positions and the sites that ranked above Sortitoutsi.net:
+
+-   **fm23 logo pack**
+
+    -   The largest drop in rank, tcmlogos.com, fmrehber.com, and fminside.net were ranked highest in Bing and Google Search.
+
+    -   Video carousels appeared in results, with content creators "TomFM" and "WorkTheSpace" featured prominently.
+        This implies search intent being installation assistance as well as download information is searched for.
+
+    -   DuckDuckGo had fmrehber.com and fminside.net listed first.
+        fminside.net had several results, which implies they have a "keyword cannibalization" issue.
+
+    -   Many results were for specifically named logo packs (TCM, DVX) even though the keyword itself is generic.
+
+    -   Third highest result for Google Search was a Reddit post mentioning "logo pack not working."
+
+-   **fm23 facepack**
+
+    -   Results dominated by fmscout.com, fmrehber.com, df11faces.com.
+
+    -   All search engine results featured video carousels
+
+    -   "Cut-Out Faces" ranked highly in Google Search for Sortitoutsi.net.
+
+-   **fm23 cheap wonderkids**
+
+    -   fmscout.com ranked at the top for Bing, with fmscout.com created videos featured in video lists at top of results.
+
+    -   A Reddit article topped Google Search results.
+        "Cut-Out Faces" ranked highly in Google Search for Sortitoutsi.net.
+
+    -   Two sites 90min.com and CulturedVultures.com show interesting website themes.
+        Both sites have "listicle" format, with page spanning images.
+        90min.com had minimalist presentation of "Wonderkid" information, just showing name, price, and club.
+
+    -   All search engine results featured video carousels.
+
+-   **fm23 kits**
+
+    -   Image carousels present in search engine results.
+
+    -   Sortitoutsi.net ranks highly in Bing and is first in DuckDuckGo.
+        DuckDuckGo mentions fmrehber.com, fmscout.com second and third.
+
+    -   DuckDuckGo presented fmslovakia, and also presented proper names for kit packs in results.
+
+-   **fm23 face pack**
+
+    -   Similar to "fm23 facepack," but ranked slightly lower in DuckDuckGo.
+
+    -   All search engine results featured video carousels
+
+    -   "Cut-Out Faces" ranked highly in Google Search for Sortitoutsi.net.
+
+The initial set of competitors at the time of the SEMRush data capture have shifted to a set of new sites that may be responsible for pushing Sortitoutsi.net down in the rankings for keywords aligning with a "Game Asset" orientation.
+
+### Keyword Targeting Strategy
+
+We define our initial criteria for keywords to target as so:
+
+`position`
+
+:   Ranging from 1 through 15
+
+Search Volume
+
+:   Raw amount of search engine traffic for a keyword
+
+Search Efficiency
+
+:   Ratio of Traffic divided by Search Volume
+
+Keyword Difficulty
+
+:   Ranging from 0 to 30, as we seek lowered ranking difficulty
+
+Relevance
+
+:   Alignment with Sortitoutsi.net's site goals
+
+The relevance of a query is cast into some ambiguity by the manner in which SEMRush may interpret Search Intent.
+"Best" indicates a "commercial" interest, while Football Manager Players are seeking out the "best" players to have their managerial avatars recruit in their games.
+For "Relevance" we will define this as queries with "informational" intent.
+
+With our CSV data exported and imported into [Tableau](SortitoutSI Organic Positions | Tableau Public) creating a visualization with a dashboard to make surfacing and filtering by different parameters simple:
+
+![Sortitoutsi.net Organic Positions Tableau Dashboard](./images/Sortitoutsi_Organic_Positions.png "Snapshot of Sortitoutsi.net Organic Positions Tableau Dashboard")
+
+We were able to list the top ranking keywords during the time of the SEMRush snapshot, using the following criteria:
+
+-   `position` = 1
+
+-   Keyword Difficulty \< 30
+
+-   Search Efficiency \> 8.00
+
+-   "Informational" Search Intent
+
+```         
+fm23 kits
+fm 23 kits
+fm23 3d kits
+ugo ibeabuchi
+fm23 mods
+south shields fc players wages
+fm23 badge pack
+fm23 badges
+fort william fc player wages
+celtic fm23
+fm 23 logos
+fm23 kit pack
+fm23 stadium pack
+fm23 updated database
+deportivo la coruna fm23
+fm logo pack
+fm23 kit packs
+fm23 kits megapack
+football manager 2023 mods
+king's lynn fc players wages
+fm 23 mods
+fm logos
+fm23 logo
+football manager 2023 logo pack
+football manager logo pack
+logo pack fm23
+fm23 national league
+salento fm23
+3d kits football manager
+endrick fm22
+fm 23 kit pack
+fm facepacks
+fm23 custom start date
+fm23 graphics
+football manager logos megapack
+solihull moors players wages
+dartford fc players wages
+fm23 guide
+fm23 kits pack
+football manager 2023 kits
+hereford fc players wages
+hyde united players wages
+maidstone united players wages
+3d 23
+afc richmond fm23
+arthur melo fm22
+chester fc players wages
+falkirk fc players wages
+fm 2023 logo pack
+fm 22 newcastle
+fm22 newcastle
+fm23 celtic
+fm23 rangers
+fm23 vanarama north
+football manager face pack
+georgian wonderkid
+serie a fm23
+spennymoor town fc wages
+turkish wonderkids
+who did rudi coleano play for
+```
+
+We use traditional SEO Keyword Research terminology to subdivide this list:
+
+Seed Keywords
+
+:   Core words, phrases, themes for a site.
+    These are short and generic in nature, and generally are high-volume and extremely competitive
+
+Head Terms
+
+:   Short terms, more specific than Seed Keywords, but still covering broad topics.
+    Example: fm23 kits, fm23 mods, fm23 logos.
+    Example: fm23 badge pack, fm23 kits megapack, fm23 stadium pack.
+
+Long-Tail Keywords
+
+:   Longer and more specific phrases that may have lower search volume and competitiveness.
+    Often used by users closer to making a purchasing decision, or are searching for niche content.
+    Example: ugo ibeabuchi, south shields fc player wages, turkish wonderkids.
+
+#### Seed Keywords
+
+```         
+fm23 kits
+fm 23 kits
+fm23 mods
+fm 23 logos
+fm logo pack
+fm23 logo
+football manager 2023 mods
+football manager 2023 logo pack
+fm 23 mods
+fm logos
+football manager logo pack
+logo pack fm23
+fm facepacks
+football manager logos megapack
+fm 2023 logo pack
+fm23 custom start date
+fm23 graphics
+football manager face pack
+```
+
+#### Head Terms
+
+```         
+fm23 badge pack
+fm23 kits megapack
+fm23 stadium pack
+fm23 3d kits
+fm23 kit pack
+fm23 updated database
+fm23 national league
+3d kits football manager
+fm23 kits pack
+football manager 2023 kits
+serie a fm23
+fm23 vanarama north
+fm23 guide
+fm23 rangers
+fm23 celtic
+```
+
+#### Long-Tail Keywords
+
+```         
+ugo ibeabuchi
+south shields fc players wages
+fort william fc player wages
+celtic fm23
+deportivo la coruna fm23
+king's lynn fc players wages
+salento fm23
+endrick fm22
+solihull moors players wages
+dartford fc players wages
+hereford fc players wages
+hyde united players wages
+maidstone united players wages
+afc richmond fm23
+arthur melo fm22
+chester fc players wages
+falkirk fc players wages
+fm 22 newcastle
+fm22 newcastle
+georgian wonderkid
+spennymoor town fc wages
+turkish wonderkids
+who did rudi coleano play for
+fm 23 kit pack
+fm23 3d kits
+3d 23
+fm23 logo pack
+```
+
+As this dataset is was captured on October 2023, we recommend conducting fresh searches for each keyword , recording where Sortitoutsi.net scores in search results for the keyword, assessing the keyword's presence in Google Trends and search intent relevance, with a mind to creating a new data set with the associated keyword and its most recent ranking position as well as any relevant trend data.
+After this step, each segment of the full list should be addressed with priorities being:
+
+1.  Seed Keywords
+
+2.  Head Terms
+
+3.  Long-Tail Keywords
+
+## Summary and Recommendations
+
+### Summary
+
+-   **Keyword Performance Insights**
+
+    -   **High-Performing Keywords**: Sortitoutsi.net had a strong presence in the Game Assets and Wonderkids categories at the time the data was capture, with keywords consistently ranking in the top positions.
+        This suggests a well-established domain authority in these areas.
+
+    -   **Brand Identity Keywords**: The high search volume for brand-related keywords underscores the site's strong brand recognition and the trust users place in it for Football Manager resources.
+
+    -   **Traffic Efficiency**: Game Assets category demonstrates the highest traffic efficiency, indicating that users searching for these keywords are more likely to engage with the site.
+        The site was a trusted and clicked-through site for logos, face packs, kits, and other updates.
+
+-   **SERP Features Analysis**
+
+    -   **Sitelinks and Video Prevalence**: Keywords associated with Sitelinks and Video SERP features dominate the top rankings, suggesting these features significantly enhance visibility and click-through rates.
+        As Sitelinks are programmatically generated by search engines, this means the underlying site structure and "crawlability" is well-executed.
+
+    -   **Underutilized SERP Features**: Other SERP features like Tweets and Images are less prevalent.
+        There may be opportunities to optimize content to target these features.
+
+-   **CPC Value Considerations**
+
+    -   **Monetization Potential**: While the direct CPC value for the top 100 keywords is limited, the overall potential for monetization across all keywords is substantial, particularly in the Wonderkids and Tactics categories. Monetization via paid ads may not be part of Sortitoutsi.net's revenue model, but high CPC value keywords may act as a proxy for the site's present marketing and advertising potential.
+
+### Recommendations
+
+-   **Keyword Strategy**
+
+    -   **Focus on Game Assets and Wonderkids**
+
+        -   Prioritize content creation and optimization in these categories to capitalize on existing strengths regarding logos, faces, kits, and game updates.
+
+        -   Consider creating more in-depth guides, downloadable resources, and interactive tools to maintain and grow traffic.
+            Example: A "Wonderkid Finder" application with dynamically updated data and filtering parameters matching user search intent.
+
+        -   Analyze competitor sites that rank highly for Wonderkids and see if there are patterns to their site structure and content that can be adapted to Sortitoutsi.net.
+
+    -   **Consider Expansion into Tactics and Player Attributes**: Although these categories currently show lower traffic efficiency, they represent potential growth areas.
+        Develop and promote content that targets niche interests, such as tactical analysis, player attributes, anecdotal player performance data, to attract a dedicated audience.
+
+    -   **Consider Keyword Variants**: One persistent theme of many keywords was the use of the word "best." This confused SEMRush with its generalized association with commercial intent.
+        By finding alternative head terms and "power words", Sortitoutsi.net may be able to rank for low competition keywords that still match search intent.
+        Imagine ranking highly for "elite wonderkids" or using adjectives like "top," "high-potential," or "players to watch." Our analysis has shown many keywords are not difficult to rank for and have a stable amount of traffic associated with them.
+
+-   **SERP Feature Optimization**
+
+    -   **Target Sitelinks and Video SERP Features**
+
+        -   Seek to optimize content to maintain high visibility in these SERP features.
+            Sitelinks are search engine generated, but can be facilitated by having clear navigation structure, good internal link coverage, descriptive meta titles, as well optimization of [Core Web Vitals](Defining%20the%20Core%20Web%20Vitals%20metrics%20thresholds%20%7C%20Articles%20%7C%20web.dev).
+
+        -   Consider creating more video content.
+            The presence of video carousels in numerous assessments of Sortitoutsi.net's top keywords would indicate that search intent has shifted from "informational" to an "instructional" focus.
+            Video may enable Sortitoutsi.net to capitalize on its present user base, foster an expanded search presence in web *and* video search, and create persistent presence in search engine results due to video content's long life span.
+
+    -   **Explore Underutilized SERP Features**: Experiment with content that could trigger less common SERP features like Tweets and Images.
+        This could involve leveraging social media integrations and enhancing image metadata.
+        It is unclear if Reddit or other discussion forums have a designated SERP Feature association, but the high ranking position of various keywords may present an opportunity to backlink to Sortitoutsi.net and have discussion forums lend their domain authority results.
+
+-   **Site Structure and Content Updates**
+
+    -   **Reduce (and capitalize on) URL Cannibalization**:
+
+        -   Address the issue of keyword cannibalization by consolidating similar content under fewer URLs.
+            This will help concentrate traffic and improve search rankings for key pages.
+
+        -   See @keyword-cannibalization for more details on how fminside.net was discovered to have been victim of this phenomena.
+            Use their site as an "anti-pattern" example and avoid having multiple pages rank highly for the same keywords.
+
+    -   **Enhance User Experience**: Given the high traffic efficiency in certain categories, continue to refine the user experience to encourage longer visits and more engagement.
+        This could involve updating site navigation, improving mobile usability (if applicable), and ensuring fast load times.
+
+-   **Exploration of New Opportunities**
+
+    -   **Keyword Expansion**: Regularly review and expand the keyword list to capture emerging trends.
+        Use tools like SEMrush to identify new keyword opportunities that align with the site’s content strategy.
+        As trends in Football in real life shift, these shifts may be mirrored in Football Manager relevant searches.
+        Follow Football-related websites and publications, understand how their content may impact Football Manager searches, and proactively promote and create content with keywords that have a rising trend.
+
+    -   **Content Diversification**
+
+        -   Explore new content formats such as podcasts, live streams, and interactive features to engage users in different ways and attract a broader audience.
+            Video-oriented content and podcasts "humanize" the discussion and accelerates user trust, which can translate into increased site traffic.
+
+        -   Within the "Long-Tail" keywords, are very localized, niche searches that could be capitalized on with targeted content.
+            Examples: "turkish wonderkids," "georgian wonderkids," and "vanarama north." monitoring and detecting the national origin of site traffic may enable interesting opportunities to generate "localized" content based on web analytics data.
+
+        -   Consider creating experimentation infrastructure to compare and contrast new content formats and patterns with present Sortitoutsi.net web content.
+            Create experiments that target new content types and formats to small percentages of the user base, while maintaining the present content in its original format.
+            After some time, compare and contrast the engagement and outcomes of the old format versus the new to see which format is more conducive to site traffic.
+            An example of this may be to replace flat player lists with image galleries containing the same content, but with rich imagery and minimal extraneous page elements.
+
+These recommendations aim to enhance Sortitoutsi.net's visibility, user engagement, and monetization potential, ensuring continued growth and relevance in the Football Manager community.
+
+## Appendix
+
+### Libraries
+
+```{r eval=FALSE}
+install.packages("tidyverse")
+install.packages("purrr")
+install.packages("glue")
+install.packages("UpSetR")
+install.packages("tidyr")
+install.packages("ggplot2")
+install.packages("plotly")
+install.packages("dplyr")
+install.packages("reshape2")
+library(tidyverse)
+library(purrr)
+library(glue)
+library(dplyr)
+library(UpSetR)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(reshape2) 
+```
+
+### Functions
+
+#### remove_keyword_duplicates
+
+```{r eval=FALSE}
+
+# Function to remove duplicate keywords from dataframe
+remove_keyword_duplicates <- function(df) {
+  # Find duplicate values in the 'keyword' column
+  cleaned_df_dupes <- df %>%
+    group_by(keyword) %>% # Group on keywords
+    filter(n() > 1) %>%  # If the count of a group is > 1, is a dupe
+    arrange(position, search_volume, traffic) %>% # set our sort criteria 
+    slice_head(n=1) # Retain the highest value
+
+  # After we have our dupes in a separate dataframe
+  # remove all duplicate rows in the original dataframe via filter
+  removed_dupes_df <- df %>%
+  filter(!(keyword %in% cleaned_df_dupes$keyword))
+  
+  # We then append the `cleaned_df_dupes` back into the 
+  # dataframe containing our original data
+  # Use rbind to append the cleaned dupes back onto original
+  output_df <- rbind(removed_dupes_df, cleaned_df_dupes)
+  
+  # Return our output
+  return(output_df)
+}
+
+```
+
+#### create_interactive_histogram
+
+```{r eval=FALSE}
+library(ggplot2)
+library(plotly)
+
+# Define the function to generate an interactive histogram with optional summary stats
+create_interactive_histogram <- function(df, column_name, title = "Interactive Histogram", bins = 30, mean_value = NULL, median_value = NULL) {
+
+  # Calculate the total number of observations
+  total_observations <- nrow(df)
+  
+  # Create the histogram
+  df_hist <- ggplot(df, aes_string(x = column_name)) +
+    geom_histogram(aes(y = (..count..) / total_observations * 100, 
+                       text = paste("Count:", ..count..)),  # Tooltip text showing the count
+                   fill = "steelblue", color = "darkblue", boundary = 0, bins = bins) +
+    labs(title = title,
+         x = column_name,
+         y = "Frequency") +  # Label y-axis as Percent of Total
+    theme_minimal()
+
+  # Convert to interactive plot with custom tooltip
+  df_hist_interactive <- ggplotly(df_hist, tooltip = "text")
+  
+  # Return the interactive plot
+  return(df_hist_interactive)
+
+}
+```
+
+#### categorize_keywords
+
+```{r eval=FALSE}
+
+# Load necessary libraries
+library(tibble)
+library(dplyr)
+
+
+# Reusable function to categorize keywords with more detailed logic
+categorize_keywords <- function(keywords) {
+  
+  # Initialize the dataframe
+  data <- tibble(
+    Keyword = keywords,
+    `Brand & Identity` = 0,
+    `Game Assets` = 0,
+    `Player Stats & Profiles` = 0,
+    `Wonderkids & Best Players` = 0,
+    `Tactics & Formations` = 0,
+    `Clubs & Leagues` = 0
+  )
+  
+  # Define logic for each category
+  for (i in 1:nrow(data)) {
+    keyword <- tolower(data$Keyword[i])
+    
+    # Brand & Identity
+    if (grepl("sortitoutsi|sort it out si|sortitousi|sortitioutsi|sortoutsi|sortitout", keyword)) {
+      data$`Brand & Identity`[i] <- 1
+    }
+    
+    # Game Assets
+    if (grepl("logo pack|face pack|facepack|kits|mods|badge pack|logos|stadium pack|kit pack|kit packs|kits megapack|player faces", keyword)) {
+      data$`Game Assets`[i] <- 1
+    }
+    
+    # Player Stats & Profiles
+    if (grepl("stats|wages|potential|hojlund|fergusson|bellingham|garnacho|ibeabuchi", keyword)) {
+      data$`Player Stats & Profiles`[i] <- 1
+    }
+    
+    # Wonderkids & Best Players
+    if (grepl("wonderkid|cheap wonderkids|best|young|cb|strikers|goalkeeper|lw|hojlund|fergusson|bellingham|garnacho", keyword)) {
+      data$`Wonderkids & Best Players`[i] <- 1
+    }
+    
+    # Tactics & Formations
+    if (grepl("tactics|tactic|formation|442", keyword)) {
+      data$`Tactics & Formations`[i] <- 1
+    }
+    
+    # Clubs & Leagues
+    if (grepl("fc|players|league|club|united|celtic|scotland|york|bromley|linfield|fort william|hashtag|wrexham|kings lynn|atletico pamplona|german", keyword)) {
+      data$`Clubs & Leagues`[i] <- 1
+    }
+  }
+  
+  return(data)
+}
+
+
+```
+
+#### summarize_and_plot
+
+```{r eval=FALSE}
+# Define the function
+summarize_and_plot <- function(filter_dfs, main_df, target_column, format_usd = FALSE) {
+  # Initialize an empty dataframe to store results
+  result_df <- data.frame(
+    Category = character(),
+    Total_Sum = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Loop over the list of dataframes
+  for (df_name in names(filter_dfs)) {
+    # Get the current dataframe
+    df <- filter_dfs[[df_name]]
+    
+    # Filter and summarize the target column
+    total_sum <- main_df %>%
+      filter(keyword %in% df$Keyword) %>%
+      summarize(Total_Sum = sum(.data[[target_column]], na.rm = TRUE)) %>%
+      pull(Total_Sum)
+    
+    # Append the results to the result_df dataframe
+    result_df <- rbind(result_df, data.frame(Category = df_name, Total_Sum = total_sum))
+  }
+  
+  # Generate the barplot
+  output_plot <- ggplot(result_df, aes(x = reorder(Category, Total_Sum), y = Total_Sum)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    labs(title = paste("Total", target_column, "by Keyword Category"),
+         x = "Keyword Category",
+         y = target_column) +
+    theme_minimal() +
+    coord_flip()
+  
+  # Conditionally format the y-axis as USD
+  if (format_usd) {
+    output_plot <- output_plot + 
+      scale_y_continuous(labels = scales::dollar_format(prefix = "$", suffix = "")) +
+      labs(y = paste(target_column, "(USD)"))
+  }
+  
+  output_plot <- ggplotly(output_plot)
+  output_plot
+}
+
+```
+
+#### load_competitor_data
+
+```{r eval=FALSE}
+# Function to load the data
+load_competitor_data <- function(competitor, file_pattern) {
+  # Define the directory where the files are located (you might need to change this)
+  dir_path <- "./data"  # Current directory or specify the correct path
+  # Create a regex pattern to match the file
+  full_pattern <- paste0(".*", competitor, ".*", file_pattern)
+
+  # Find the matching file
+  file_name <- list.files(path = dir_path, pattern = full_pattern, full.names = TRUE)
+
+  # Ensure that exactly one file is found
+  if (length(file_name) == 1) {
+    # Load the CSV file, use `check.names = FALSE` to read 
+    # columns with strange characters
+    data <- read.csv(file_name, check.names = FALSE)
+    return(data)
+  } else if (length(file_name) == 0) {
+    stop(paste("No files found for pattern:", full_pattern))
+  } else {
+    stop(paste("Multiple files found for pattern:", full_pattern))
+  }
+}
+```
+
+### Site Captures
+
+One of the highly ranking competitor sites fmrehber.com no longer appears to host active content, in spite of high search engine ranking.
+We have utilized the [Wayback Machine](https://web.archive.org) to capture an image of its landing page.
+As its website appears to be "responsive" in nature, the layout of images and text changes depending on medium.
+Viewing its [March 28, 2024 capture](https://web.archive.org/web/20240328230836/https://fmrehber.com/#expand) may be beneficial to exploring alternative page and site structures to improve user engagement.
