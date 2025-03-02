@@ -23,6 +23,39 @@ After using the download link provided in our Spotify email, we received a **16.
 * 1 `JSON` file capturing video watching history that is **40** KB in size.
 * 1 `ReadMeFirst_ExtendedStreamingHistory.pdf` file containing explanations for each technical field within each `JSON` record.  
 
+### Sample JSON Record
+```
+{'ts': '2014-02-08T08:19:05Z',
+ 'platform': 'WebPlayer (websocket RFC6455)',
+ 'ms_played': 345730,
+ 'conn_country': 'US',
+ 'ip_addr': 'XXX.XXX.XXX.XXX',
+ 'master_metadata_track_name': 'Get Closer',
+ 'master_metadata_album_artist_name': 'Ron Basejam',
+ 'master_metadata_album_album_name': 'Trax 3lLascivious SummerlSelected by Eric Pajot',
+ 'spotify_track_uri': 'spotify:track:4qD4HNcdFGihp5Mn8JTgTB',
+ 'episode_name': None,
+ 'episode_show_name': None,
+ 'spotify_episode_uri': None,
+ 'audiobook_title': None,
+ 'audiobook_uri': None,
+ 'audiobook_chapter_uri': None,
+ 'audiobook_chapter_title': None,
+ 'reason_start': 'clickrow',
+ 'reason_end': 'unknown',
+ 'shuffle': False,
+ 'skipped': False,
+ 'offline': False,
+ 'offline_timestamp': None,
+ 'incognito_mode': False}
+``` 
+
+Most fields are self-explanatory via their naming. We will obscure the IP address deliberately in our final results to prevent data leakage regarding previous listening locations.
+
+### Database Schema Creation
+
+We will be using PostgreSQL to load the data, as-is, into a database table.
+
 # Findings and Analysis
 
 # Recommendations
