@@ -1,0 +1,26 @@
+CREATE TABLE spotify_data (
+    id integer GENERATED ALWAYS AS IDENTITY,
+    timestamp_column timestamp with time zone,
+    platform varchar(50),
+    ms_played integer,
+    conn_country varchar(2),
+    track_name varchar(100),
+    artist_name varchar(100),
+    album_name varchar(100),
+    spotify_track_uri varchar(50),
+    episode_name varchar(100),
+    episode_show_name varchar(100),
+    spotify_episode_uri varchar(50),
+    audiobook_title  varchar(100),
+    audiobook_uri  varchar(50),
+    audiobook_chapter_uri varchar(50),
+    audiobook_chapter_title varchar(100),
+    reason_start varchar(30),
+    reason_end varchar(30),
+    shuffle boolean DEFAULT false,
+    skipped boolean DEFAULT false,
+    offline boolean DEFAULT false,
+    offline_timestamp timestamp with time zone,
+    incognito_mode DEFAULT false
+)
+
