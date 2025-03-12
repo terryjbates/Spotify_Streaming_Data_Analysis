@@ -50,3 +50,7 @@ rsconnect/
 
 # Ignore .env files storing credentials
 .env
+
+# Ignore iPython checkpoint files
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
