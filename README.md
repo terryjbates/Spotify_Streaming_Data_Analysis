@@ -15,7 +15,7 @@ This analysis will cover my complete Spotify music streaming history up until Ja
     * What does each record represent?
     * What are the key measures?
     * What are the key dimensions?
-* Create appropriate database schema and scripting to import the streaming history into our PostgreSQL database.
+* Create appropriate database schema to import raw streaming history data into our PostgreSQL database.
 * Use SQL queries, Pandas, and other tooling to conduct data cleaning, exploration and analysis processes. 
 ## Data Extraction
 After using the download link provided in our Spotify email, we received a **16.2** MB zip archive; the extracted folder is named `Spotify Extended Streaming History` with this folder being **217** MB in size. The archive contents are as follows:
@@ -52,9 +52,44 @@ After using the download link provided in our Spotify email, we received a **16.
 
 Most fields are self-explanatory via their naming. We will obscure the IP address deliberately in our final results to prevent data leakage regarding previous listening locations.
 
-### Database Schema Creation
+### Database Table Creation
 
-We will be using PostgreSQL to load the data, as-is, into a database table.
+We will be using PostgreSQL to load the data, as-is, into a database table. 
+```
+-- Create table
+CREATE TABLE spotify_data (
+    id integer GENERATED ALWAYS AS IDENTITY,
+    timestamp_column timestamp with time zone,
+    platform varchar(100),
+    ms_played integer,
+    conn_country varchar(2),
+    ip_addr varchar(15),
+    track_name varchar(300),
+    artist_name varchar(300),
+    album_name varchar(300),
+    spotify_track_uri varchar(50),
+    episode_name varchar(150),
+    episode_show_name varchar(100),
+    spotify_episode_uri varchar(50),
+    audiobook_title varchar(100),
+    audiobook_uri varchar(50),
+    audiobook_chapter_uri varchar(50),
+    audiobook_chapter_title varchar(100),
+    reason_start varchar(30),
+    reason_end varchar(30),
+    shuffle BOOLEAN DEFAULT false,
+    skipped BOOLEAN DEFAULT false,
+    offline BOOLEAN DEFAULT false,
+    offline_timestamp timestamp with time zone,
+    incognito_mode BOOLEAN DEFAULT false
+)
+
+-- Create indexes on columns we know will be frequently queried
+CREATE INDEX artist_name_idx ON spotify_data (artist_name);
+CREATE INDEX track_name_idx ON spotify_data (track_name);
+CREATE INDEX album_name_idx ON spotify_data (album_name);
+
+```
 
 # Findings and Analysis
 
