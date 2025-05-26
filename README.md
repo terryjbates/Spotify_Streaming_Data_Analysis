@@ -19,9 +19,9 @@ This analysis will cover my complete Spotify music streaming history up until Ja
 * Use SQL queries, Pandas, and other tooling to conduct data cleaning, exploration and analysis processes. 
 ## Data Extraction
 After using the download link provided in our Spotify email, we received a **16.2** MB zip archive; the extracted folder is named `Spotify Extended Streaming History` with this folder being **217** MB in size. The archive contents are as follows:
-* 18 `JSON` files capturing our audio listening history. Each file is approximately **12.3** MB in size and is prefixed with `Streaming_History_Audio_` in their respective file names
-* 1 `JSON` file capturing video watching history that is **40** KB in size.
-* 1 `ReadMeFirst_ExtendedStreamingHistory.pdf` file containing explanations for each technical field within each `JSON` record.  
+* **18** `JSON` files capturing our audio listening history. Each file is approximately **12.3** MB in size and is prefixed with `Streaming_History_Audio_` in their respective file names
+* **1** `JSON` file capturing video watching history that is **40** KB in size.
+* **1** `ReadMeFirst_ExtendedStreamingHistory.pdf` file containing explanations for each technical field within each `JSON` record.  
 
 ### Sample JSON Record
 ```
