@@ -1094,3 +1094,125 @@ FROM distinct_genres_per_year
 GROUP BY stream_year
 ORDER BY stream_year ASC;
 
+--Top genres for the year
+SELECT sd.artist_name, sd.ms_played, sdj.artist_id, a.genres
+FROM spotify_data AS sd
+JOIN sd_artists_join sdj ON sd.id = sdj.artist_id
+JOIN artists AS A ON a.id = sdj.artist_id
+WHERE sd.ms_played > 5000
+AND a.genres IS NOT NULL
+AND a.genres != '{}'
+LIMIT 10
+--JOIN sd_artists_join sdj ON a.id = sdj.artist_id
+--JOIN spotify_data sd ON sdj.sd_id = sd.id 
+
+
+-- Isolate the artists tracks, include the year played, join with join table
+-- and artists table
+
+-- Unnest the genres, sum the time played, and order the results by the time played
+
+-- Since we cannot filter directly on the result of a window function in the 
+-- same SELECT clause where it's defined.
+
+WITH artist_playtime AS (
+	SELECT 
+		sd.artist_name,
+		sd.track_name,
+		sd.ms_played,
+		sdj.artist_id,
+		DATE_PART('year', sd.timestamp_column) AS stream_year,
+		a.genres
+	FROM spotify_data AS sd
+	JOIN sd_artists_join sdj ON sd.id = sdj.artist_id
+	JOIN artists AS a ON a.id = sdj.artist_id
+	WHERE sd.ms_played > 5000
+	  AND a.genres IS NOT NULL
+	  AND a.genres != '{}'
+),
+genre_ranks AS (
+	SELECT
+		stream_year,
+		UNNEST(genres) AS genre,
+		SUM(ms_played) AS time_played,
+		RANK() OVER (
+			PARTITION BY stream_year
+			ORDER BY SUM(ms_played) DESC
+		) AS genre_rank
+	FROM artist_playtime
+	GROUP BY stream_year, genre
+)
+SELECT *
+FROM genre_ranks
+WHERE genre_rank <= 10
+ORDER BY stream_year, genre_rank;
+
+-- Show data directory
+SHOW data_directory;
+
+SELECT id,artist_name, genres, xmin::text AS xmin
+FROM artists
+WHERE id between 4300 and 5356
+ORDER BY xmin::text DESC
+--LIMIT 50;
+
+SELECT id, artist_name, genres, last_updated
+FROM artists
+WHERE id between 4989 and 5356
+--AND  last_updated < "2025-06-12"
+ORDER BY last_updated ASC
+
+
+-- Add last_updated to artists table due to spotty updates
+ALTER TABLE artists
+ADD COLUMN last_updated TIMESTAMPTZ DEFAULT now();
+
+-- Create trigger code
+CREATE OR REPLACE FUNCTION update_last_updated_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.last_updated := now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach trigger to artists table
+CREATE TRIGGER set_last_updated_timestamp
+BEFORE UPDATE ON artists
+FOR EACH ROW
+EXECUTE FUNCTION update_last_updated_column();
+
+SELECT * from artists 
+--WHERE id BETWEEN 1686 and 1720
+ORDER BY last_updated DESC
+LIMIT 20
+
+
+SELECT id, artist_name, genres from artists 
+WHERE id BETWEEN 5356 and 5436;
+
+
+
+-- Find how many unique genres were played per year 
+WITH genre_year_cte AS (
+    SELECT
+        DISTINCT UNNEST(a.genres) AS genre,
+        date_part('year', sd.timestamp_column) AS stream_year
+    FROM artists a
+    JOIN sd_artists_join sdj ON a.id = sdj.artist_id
+    JOIN spotify_data sd ON sdj.sd_id = sd.id
+    WHERE a.genres IS NOT NULL
+      AND a.genres != '{}'
+      AND sd.ms_played > 5000
+),
+distinct_genres_per_year AS (
+    SELECT stream_year, genre
+    FROM genre_year_cte
+    GROUP BY stream_year, genre
+)
+SELECT
+    stream_year,
+    COUNT(*) AS unique_genre_count
+FROM distinct_genres_per_year
+GROUP BY stream_year
+ORDER BY stream_year ASC
