@@ -1134,7 +1134,7 @@ genre_ranks AS (
 	SELECT
 		stream_year,
 		UNNEST(genres) AS genre,
-		SUM(ms_played) AS time_played,
+		SUM(ms_played) / 3600000 AS hours_played,
 		RANK() OVER (
 			PARTITION BY stream_year
 			ORDER BY SUM(ms_played) DESC
@@ -1216,3 +1216,64 @@ SELECT
 FROM distinct_genres_per_year
 GROUP BY stream_year
 ORDER BY stream_year ASC
+
+
+SELECT 
+	sd.artist_name,
+	sd.track_name,
+	sd.ms_played,
+	sdj.artist_id,
+	sd.timestamp_column
+	--DATE_PART('year', sd.timestamp_column) AS stream_year,
+	a.genres
+FROM spotify_data AS sd
+JOIN sd_artists_join sdj ON sd.id = sdj.artist_id
+JOIN artists AS a ON a.id = sdj.artist_id
+WHERE sd.ms_played > 5000
+ORDER BY sd.timestamp_column DESC
+--  AND ( a.genres IS NOT NULL
+--  OR a.genres = '{}')
+--AND DATE_PART('year', sd.timestamp_column) > 2016
+
+
+SELECT artist_name, DATE_PART('year', timestamp_column) AS stream_year
+FROM spotify_data
+WHERE DATE_PART('year', timestamp_column)  =  2019
+GROUP BY artist_name, stream_year
+
+SELECT * FROM artists 
+WHERE artist_name LIKE '%2 Bit Pie'
+
+SELECT * from sd_artists_join
+WHERE artist_name LIKE '%2 Bit Pie'
+
+-- Generate Top Genres per Year
+WITH artist_playtime AS (
+	SELECT a.artist_name
+		,a.genres
+		,sd.ms_played
+		,DATE_PART('year', sd.timestamp_column) AS stream_year
+	FROM artists AS a
+	JOIN sd_artists_join AS sdj 
+		ON a.id = sdj.artist_id
+	JOIN spotify_data AS sd 
+		ON sdj.sd_id = sd.id
+	-- WHERE a.artist_name LIKE '%2 Bit Pie'
+	--WHERE DATE_PART('year', sd.timestamp_column) = 2019
+),
+genre_ranks AS (
+	SELECT
+		stream_year,
+		UNNEST(genres) AS genre,
+		ROUND((CAST(SUM(ms_played) AS numeric)  / 3600000) , 2) AS hours_played,
+		RANK() OVER (
+			PARTITION BY stream_year
+			ORDER BY SUM(ms_played) DESC
+		) AS genre_rank
+	FROM artist_playtime
+	GROUP BY stream_year, genre
+)
+SELECT *
+FROM genre_ranks
+WHERE genre_rank <= 10
+ORDER BY stream_year, genre_rank;
