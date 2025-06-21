@@ -1277,3 +1277,49 @@ SELECT *
 FROM genre_ranks
 WHERE genre_rank <= 10
 ORDER BY stream_year, genre_rank;
+
+
+-- We must find the `space music` people
+SELECT DISTINCT a.artist_name
+	--,a.genres
+	,ROUND((CAST(SUM(sd.ms_played) AS numeric)  / 3600000) , 2) AS hours_played
+	--,SUM(sd.ms_played) AS time_played
+	--,DATE_PART('year', sd.timestamp_column) AS stream_year
+FROM artists AS a
+JOIN sd_artists_join AS sdj 
+	ON a.id = sdj.artist_id
+JOIN spotify_data AS sd 
+	ON sdj.sd_id = sd.id
+WHERE 'space music' = ANY (a.genres)
+GROUP BY a.artist_name
+ORDER BY hours_played DESC
+LIMIT 10
+
+
+-- What is the total time we have listened to *EVERYTHING* on Spotify
+SELECT ROUND((CAST(SUM(ms_played) AS numeric)  / 3600000) , 2) AS total_hours_played
+FROM spotify_data
+
+-- Date time of last record
+SELECT * FROM spotify_data
+ORDER BY timestamp_column DESC
+LIMIT 1
+
+
+-- Top Podcast per Year by Play count
+WITH podcast_tracks AS (
+	SELECT * FROM spotify_data
+	WHERE 
+		ms_played > 5000
+	AND episode_show_name IS NOT NULL
+	AND episode_name IS NOT NULL
+	--AND episode_show_name ILIKE '%EndIess [CDQ]%'
+	--LIMIT 1
+)
+SELECT DISTINCT episode_show_name
+	--,artist_name
+	,DATE_PART('year', timestamp_column) AS stream_year
+	,ROUND((CAST(SUM(ms_played) AS numeric)  / 3600000) , 2) AS total_hours_played
+FROM podcast_tracks
+GROUP BY episode_show_name, artist_name, DATE_PART('year', timestamp_column)
+ORDER BY DATE_PART('year', timestamp_column) ASC, ROUND((CAST(SUM(ms_played) AS numeric)  / 3600000) , 2) DESC
