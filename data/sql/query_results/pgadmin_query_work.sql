@@ -1323,3 +1323,35 @@ SELECT DISTINCT episode_show_name
 FROM podcast_tracks
 GROUP BY episode_show_name, artist_name, DATE_PART('year', timestamp_column)
 ORDER BY DATE_PART('year', timestamp_column) ASC, ROUND((CAST(SUM(ms_played) AS numeric)  / 3600000) , 2) DESC
+
+
+-- Identify top tracks.
+-- We do not identify individual tracks. Might need some combo of spotify_data and our join table
+
+
+SELECT * FROM spotify_data LIMIT 1
+
+-- First try. Some songs appear to be exactly the same, but have different 
+-- spotify_track_uri values. Ex: track_name: "holy terrain" "MAGDALENE"
+SELECT COUNT(timestamp_column), artist_name, track_name, album_name, spotify_track_uri
+FROM spotify_data
+WHERE artist_name = 'FKA twigs'
+GROUP BY  artist_name, track_name, album_name, spotify_track_uri
+
+
+
+WITH track_count_cte AS 
+	(SELECT COUNT(timestamp_column) AS track_count
+		,artist_name
+		,track_name
+		,album_name
+		,spotify_track_uri
+		,DATE_PART('year', timestamp_column) AS stream_year
+		FROM spotify_data
+		WHERE artist_name LIKE '%Darius%'
+		GROUP BY  artist_name, track_name, album_name, spotify_track_uri, stream_year
+	)
+SELECT SUM(track_count) as times_played, artist_name, track_name, stream_year
+FROM track_count_cte
+GROUP BY artist_name, track_name, stream_year
+ORDER BY times_played DESC
