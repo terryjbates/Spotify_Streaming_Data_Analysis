@@ -1336,22 +1336,151 @@ SELECT * FROM spotify_data LIMIT 1
 SELECT COUNT(timestamp_column), artist_name, track_name, album_name, spotify_track_uri
 FROM spotify_data
 WHERE artist_name = 'FKA twigs'
+AND ms_played > 5000
 GROUP BY  artist_name, track_name, album_name, spotify_track_uri
 
 
-
+-- Find the most played tracks across entire listening history
 WITH track_count_cte AS 
-	(SELECT COUNT(timestamp_column) AS track_count
-		,artist_name
+	(
+		SELECT 
+			COUNT(timestamp_column) AS track_count
+			,artist_name
+			,track_name
+			,album_name
+			,spotify_track_uri
+			,DATE_PART('year', timestamp_column) AS stream_year
+		FROM spotify_data
+		WHERE 
+			ms_played > 5000
+			-- AND artist_name =  'FKA twigs'
+		GROUP BY 
+		artist_name
 		,track_name
 		,album_name
 		,spotify_track_uri
-		,DATE_PART('year', timestamp_column) AS stream_year
-		FROM spotify_data
-		WHERE artist_name LIKE '%Darius%'
-		GROUP BY  artist_name, track_name, album_name, spotify_track_uri, stream_year
+		,stream_year
 	)
-SELECT SUM(track_count) as times_played, artist_name, track_name, stream_year
+SELECT 
+	SUM(track_count) as times_played
+	,artist_name
+	,track_name
+	,stream_year
 FROM track_count_cte
-GROUP BY artist_name, track_name, stream_year
-ORDER BY times_played DESC
+GROUP BY 
+	artist_name
+	,track_name
+	,stream_year
+ORDER BY 
+	times_played DESC
+LIMIT 
+	10
+
+
+-- Find top tracks for entire history and include genres
+WITH track_count_cte AS 
+	(
+		SELECT 
+			COUNT(timestamp_column) AS track_count
+			,artist_name
+			,track_name
+			,album_name
+			,spotify_track_uri
+			,DATE_PART('year', timestamp_column) AS stream_year
+		FROM spotify_data
+		WHERE 
+			ms_played > 5000
+		GROUP BY 
+		artist_name
+		,track_name
+		,album_name
+		,spotify_track_uri
+		,stream_year
+	)
+SELECT 
+	SUM(tce.track_count) AS times_played
+	,tce.artist_name
+	,tce.track_name
+	,tce.stream_year
+	,a.genres AS genres
+FROM 
+	track_count_cte AS tce
+LEFT JOIN 
+	artists AS a 
+ON 
+	tce.artist_name = a.artist_name	
+GROUP BY 
+	tce.artist_name
+	,tce.track_name
+	,tce.stream_year
+	,a.genres
+ORDER BY 
+	times_played DESC
+LIMIT 
+	10
+
+
+-- Find top tracks for entire history and include genres, rank by times played, then filter
+-- results down to top 10 by ranking column.
+WITH track_count_cte AS 
+	(
+		SELECT 
+			COUNT(timestamp_column) AS track_count
+			,artist_name
+			,track_name
+			,album_name
+			,spotify_track_uri
+			,DATE_PART('year', timestamp_column) AS stream_year
+		FROM spotify_data
+		WHERE 
+			ms_played > 5000
+		GROUP BY 
+		artist_name
+		,track_name
+		,album_name
+		,spotify_track_uri
+		,stream_year
+	),
+tracks_and_genres AS
+	(
+		SELECT 
+			SUM(tce.track_count) AS times_played
+			,tce.artist_name
+			,tce.track_name
+			,tce.stream_year
+			,a.genres AS genres
+			,RANK() OVER
+			(
+				PARTITION BY tce.stream_year
+				ORDER BY SUM(tce.track_count) DESC
+			) AS ranking
+		FROM 
+			track_count_cte AS tce
+		LEFT JOIN 
+			artists AS a 
+		ON 
+			tce.artist_name = a.artist_name
+		GROUP BY 
+			tce.artist_name
+			,tce.track_name
+			,tce.stream_year
+			,a.genres
+		ORDER BY 
+			tce.stream_year
+			,RANK() OVER
+			(
+				PARTITION BY tce.stream_year
+				ORDER BY SUM(tce.track_count) DESC
+			)
+	)
+SELECT 
+	* 
+FROM 
+	tracks_and_genres
+WHERE
+	ranking <= 10
+	
+
+
+
+SELECT * from artists LIMIT 1
