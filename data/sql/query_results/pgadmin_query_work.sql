@@ -1390,6 +1390,7 @@ WITH track_count_cte AS
 		FROM spotify_data
 		WHERE 
 			ms_played > 5000
+			AND artist_name IS NOT NULL
 		GROUP BY 
 		artist_name
 		,track_name
@@ -1434,6 +1435,7 @@ WITH track_count_cte AS
 		FROM spotify_data
 		WHERE 
 			ms_played > 5000
+			AND artist_name IS NOT NULL
 		GROUP BY 
 		artist_name
 		,track_name
@@ -1443,17 +1445,18 @@ WITH track_count_cte AS
 	),
 tracks_and_genres AS
 	(
-		SELECT 
-			SUM(tce.track_count) AS times_played
-			,tce.artist_name
-			,tce.track_name
-			,tce.stream_year
-			,a.genres AS genres
+		SELECT
+			tce.stream_year
+			,SUM(tce.track_count) AS times_played
 			,RANK() OVER
 			(
 				PARTITION BY tce.stream_year
 				ORDER BY SUM(tce.track_count) DESC
 			) AS ranking
+			,tce.artist_name
+			,tce.track_name
+			,a.genres AS genres
+
 		FROM 
 			track_count_cte AS tce
 		LEFT JOIN 
