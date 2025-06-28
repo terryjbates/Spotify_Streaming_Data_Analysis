@@ -1486,4 +1486,100 @@ WHERE
 
 
 
+
+-- results down to top 10 by ranking column.
+
+CREATE TABLE temp_most_played_tracks AS (
+	WITH track_count_cte AS 
+		(
+			SELECT 
+				COUNT(timestamp_column) AS track_count
+				,artist_name
+				,track_name
+				,album_name
+				,spotify_track_uri
+				,DATE_PART('year', timestamp_column) AS stream_year
+			FROM spotify_data
+			WHERE 
+				ms_played > 5000
+				AND artist_name IS NOT NULL
+			GROUP BY 
+			artist_name
+			,track_name
+			,album_name
+			,spotify_track_uri
+			,stream_year
+		),
+	tracks_and_genres AS
+		(
+			SELECT
+				tce.stream_year
+				,SUM(tce.track_count) AS times_played
+				,RANK() OVER
+				(
+					PARTITION BY tce.stream_year
+					ORDER BY SUM(tce.track_count) DESC
+				) AS ranking
+				,tce.artist_name
+				,tce.track_name
+				,a.genres AS genres
+	
+			FROM 
+				track_count_cte AS tce
+			LEFT JOIN 
+				artists AS a 
+			ON 
+				tce.artist_name = a.artist_name
+			GROUP BY 
+				tce.artist_name
+				,tce.track_name
+				,tce.stream_year
+				,a.genres
+			ORDER BY 
+				tce.stream_year
+				,RANK() OVER
+				(
+					PARTITION BY tce.stream_year
+					ORDER BY SUM(tce.track_count) DESC
+				)
+		)
+	SELECT 
+		* 
+	FROM 
+		tracks_and_genres
+	WHERE
+		ranking = 1
+	
+)
+
+SELECT * FROM temp_most_played_tracks ;
+
+-- Use the "for loop like" functionality of LATERAL with JOIN
+
+SELECT 
+	tmpt.artist_name
+	,tmpt.track_name
+	,tmpt.times_played
+	,sd.timestamp_column
+FROM
+	temp_most_played_tracks AS tmpt
+LEFT JOIN LATERAL (
+	SELECT
+		timestamp_column
+		,DATE_PART('year', timestamp_column) AS sd_stream_year
+	FROM
+		spotify_data
+	WHERE
+		artist_name = tmpt.artist_name
+		AND
+		track_name = tmpt.track_name
+		AND
+		DATE_PART('year', timestamp_column) = tmpt.stream_year
+		
+	ORDER BY timestamp_column ASC
+	LIMIT 1) AS sd
+ON TRUE
+
+
+SELECT * FROM spotify_data LIMIT 1
 SELECT * from artists LIMIT 1
