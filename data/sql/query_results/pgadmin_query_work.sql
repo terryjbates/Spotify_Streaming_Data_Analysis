@@ -1485,9 +1485,7 @@ WHERE
 	
 
 
-
-
--- results down to top 10 by ranking column.
+-- Create a temp table based on results of top 10 by played ranking column.
 
 CREATE TABLE temp_most_played_tracks AS (
 	WITH track_count_cte AS 
@@ -1555,7 +1553,6 @@ CREATE TABLE temp_most_played_tracks AS (
 SELECT * FROM temp_most_played_tracks ;
 
 -- Use the "for loop like" functionality of LATERAL with JOIN
-
 SELECT 
 	tmpt.artist_name
 	,tmpt.track_name
@@ -1575,9 +1572,10 @@ LEFT JOIN LATERAL (
 		track_name = tmpt.track_name
 		AND
 		DATE_PART('year', timestamp_column) = tmpt.stream_year
-		
-	ORDER BY timestamp_column ASC
-	LIMIT 1) AS sd
+	ORDER BY 
+		timestamp_column ASC
+	LIMIT 1
+	) AS sd
 ON TRUE
 
 
