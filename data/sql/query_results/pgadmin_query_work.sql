@@ -1634,5 +1634,110 @@ ORDER BY
 
 
 	
-SELECT * FROM spotify_data LIMIT 1
+SELECT 
+	reason_start
+	,COUNT(reason_start) AS count 
+FROM 
+	spotify_data
+GROUP BY reason_start
+ORDER BY
+	count DESC
+	,reason_start
+
+
+SELECT 
+	reason_end,
+	COUNT(reason_end) AS count 
+FROM 
+	spotify_data
+GROUP BY reason_end
+ORDER BY 
+	count DESC
+	,reason_end
+
+-- Total time in hours listened on Spotify by year.
+SELECT 
+	DATE_PART('year', timestamp_column) AS year
+	,SUM(ms_played)/3600000 AS hours_played
+FROM
+	spotify_data
+WHERE
+	ms_played > 5000
+GROUP BY
+	year
+ORDER BY
+	year ASC
+
+
+-- Find the average track length in minutes
+SELECT 
+	DATE_PART('year', timestamp_column) AS year
+	,ROUND((AVG(ms_played)/60000),2) AS avg_mins_played
+FROM
+	spotify_data
+WHERE
+	ms_played > 5000
+GROUP BY
+	year
+ORDER BY
+	year ASC
+
+
+
+-- What is average song length by genre, by year?
+
+-- Generate Top Genres per Year
+CREATE TABLE temp_genre_track_avg_playtime AS (
+	WITH artist_playtime AS (
+		SELECT a.artist_name
+			,a.genres
+			,sd.ms_played
+			,DATE_PART('year', sd.timestamp_column) AS stream_year
+		FROM artists AS a
+		JOIN sd_artists_join AS sdj 
+			ON a.id = sdj.artist_id
+		JOIN spotify_data AS sd 
+			ON sdj.sd_id = sd.id
+	),
+	genre_avg AS (
+		SELECT
+			stream_year
+			,UNNEST(genres) AS genre
+			,ROUND((CAST(AVG(ms_played) AS numeric)  / 60000) , 2) AS avg_mins_played
+		FROM artist_playtime
+		GROUP BY stream_year, genre
+	)
+	SELECT *
+	FROM 
+		genre_avg
+	ORDER BY 
+		stream_year
+		,avg_mins_played DESC
+)
+
+
+SELECT 
+	*
+FROM  
+	temp_genre_track_avg_playtime
+WHERE
+	avg_mins_played > 4
+	AND stream_year = '2020'
+ORDER BY
+	stream_year
+	,avg_mins_played DESC
+LIMIT 10
+
+SELECT * FROM artists 
+WHERE 'cha cha cha' = ANY(genres)
+
+-- Ridiculous. Joe Baker, the Ocean Waves artist, is clssified as 'cha cha cha'
+SELECT artist_name, track_name, ms_played/6000 as min_played FROM spotify_data
+WHERE artist_name = 'Joe Baker'
+
+
+
 SELECT * from artists LIMIT 1
+
+SELECT * FROM spotify_data LIMIT 1
+
