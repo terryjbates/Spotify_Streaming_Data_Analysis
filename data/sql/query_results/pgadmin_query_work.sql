@@ -1579,5 +1579,60 @@ LEFT JOIN LATERAL (
 ON TRUE
 
 
+SELECT 
+	DISTINCT track_name
+	,artist_name
+	,DATE_PART('year', timestamp_column) AS year
+FROM
+	spotify_data
+GROUP BY
+	track_name
+	,artist_name
+	,year
+ORDER BY
+	year
+
+-- CTE version
+WITH distinct_songs AS (
+	SELECT 
+		track_name,
+		artist_name,
+		DATE_PART('year', timestamp_column) AS year
+	FROM spotify_data
+	GROUP BY track_name, artist_name, year
+)
+SELECT 
+	year,
+	COUNT(*) AS distinct_song_count
+FROM distinct_songs
+GROUP BY year
+ORDER BY year;
+
+
+-- Non CTE method to find distinct songs per year
+SELECT 
+	DATE_PART('year', timestamp_column) AS year,
+	COUNT(DISTINCT (track_name, artist_name, album_name)) AS distinct_song_count
+FROM 
+	spotify_data
+GROUP BY 
+	year
+ORDER BY
+	year;
+
+
+-- Find unique artists per year
+SELECT 
+	DATE_PART('year', timestamp_column) AS year,
+	COUNT(DISTINCT (artist_name)) AS distinct_artist_count
+FROM 
+	spotify_data
+GROUP BY 
+	year
+ORDER BY
+	year;
+
+
+	
 SELECT * FROM spotify_data LIMIT 1
 SELECT * from artists LIMIT 1
