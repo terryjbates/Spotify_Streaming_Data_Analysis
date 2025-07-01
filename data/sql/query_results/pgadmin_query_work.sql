@@ -1486,6 +1486,7 @@ WHERE
 
 
 -- Create a temp table based on results of top 10 by played ranking column.
+--DROP TABLE temp_most_played_tracks;
 
 CREATE TABLE temp_most_played_tracks AS (
 	WITH track_count_cte AS 
@@ -1546,8 +1547,7 @@ CREATE TABLE temp_most_played_tracks AS (
 	FROM 
 		tracks_and_genres
 	WHERE
-		ranking = 1
-	
+		ranking = 1	
 )
 
 SELECT * FROM temp_most_played_tracks ;
@@ -1578,7 +1578,7 @@ LEFT JOIN LATERAL (
 	) AS sd
 ON TRUE
 
-
+-- Distinct tracks played by year.
 SELECT 
 	DISTINCT track_name
 	,artist_name
@@ -1685,6 +1685,7 @@ ORDER BY
 
 
 -- What is average song length by genre, by year?
+DROP TABLE temp_genre_track_avg_playtime;
 
 -- Generate Top Genres per Year
 CREATE TABLE temp_genre_track_avg_playtime AS (
@@ -1728,16 +1729,136 @@ ORDER BY
 	,avg_mins_played DESC
 LIMIT 10
 
+-- Search the array column `genres` to find artists 
+-- associated with `cha cha cha`
 SELECT * FROM artists 
 WHERE 'cha cha cha' = ANY(genres)
 
--- Ridiculous. Joe Baker, the Ocean Waves artist, is clssified as 'cha cha cha'
-SELECT artist_name, track_name, ms_played/6000 as min_played FROM spotify_data
-WHERE artist_name = 'Joe Baker'
+-- Joe Baker, my "ocean waves" artist, classified as 'cha cha cha'
+SELECT 
+	artist_name
+	,track_name
+	,ms_played/60000 as min_played
+FROM 
+	spotify_data
+WHERE 
+	artist_name = 'Joe Baker'
+	AND DATE_PART('year', timestamp_column) = 2020
+
+
+-- Find the single calendar day with the most elapsed listening time in a year
+SELECT
+	DATE_PART('year', timestamp_column) AS year
+	,DATE_PART('month', timestamp_column) AS month
+	,DATE_PART('day', timestamp_column) AS day
+	,SUM(ms_played) / 60000 as minutes_playing
+FROM
+	spotify_data
+WHERE
+	timestamp_column BETWEEN '2020-01-01' AND '2020-01-02'
+GROUP BY
+	year
+	,month
+	,day
+	
+
+-- The basic aggregation of minutes played per day
+-- using full table contents.
+SELECT
+  DATE_TRUNC('day', timestamp_column) AS calendar_day,
+  SUM(ms_played) / 60000.0 AS minutes_played
+FROM
+  spotify_data
+GROUP BY
+  calendar_day
+ORDER BY
+  minutes_played DESC;
+
+
+WITH daily_playtime AS (
+  SELECT
+    DATE_TRUNC('day', timestamp_column) AS calendar_day,
+    DATE_PART('year', timestamp_column) AS year,
+    ROUND((SUM(ms_played) / 3600000.0), 2) AS hours_played
+  FROM spotify_data
+  GROUP BY 
+	  year
+	  ,calendar_day
+)
+SELECT *
+FROM (
+  SELECT 
+    *,
+    RANK() OVER (PARTITION BY year ORDER BY hours_played DESC) AS rank
+  FROM daily_playtime
+) ranked
+WHERE rank = 1
+ORDER BY year;
+
+
+-- Search for a specific date.
+SELECT
+	timestamp_column
+	,platform
+	,ms_played
+	,track_name
+	,artist_name
+	,spotify_track_uri
+FROM
+	spotify_data
+WHERE
+	DATE_TRUNC('day', timestamp_column) = '2019-06-30'::timestamp;
+--LIMIT 20;
+
+
+SELECT
+--  timestamp_column,
+--  artist_name,
+--  track_name,
+--  ms_played,
+--  spotify_track_uri,
+  COUNT(*) AS dup_count
+FROM spotify_data
+GROUP BY
+  timestamp_column,
+  artist_name,
+  track_name,
+  ms_played,
+  spotify_track_uri
+HAVING COUNT(*) > 1
+ORDER BY dup_count DESC;
+
+-- Just get the count of duplicates
+SELECT SUM(dup_count - 1) AS total_duplicates
+FROM (
+  SELECT COUNT(*) AS dup_count
+  FROM spotify_data
+  GROUP BY
+    timestamp_column,
+    artist_name,
+    track_name,
+    ms_played,
+	spotify_track_uri,
+	ip_addr
+  HAVING COUNT(*) > 1
+) sub;
+
+
+-- DELETE duplicate records
+DELETE FROM spotify_data a
+USING spotify_data b
+WHERE
+  a.ctid < b.ctid AND  -- Keep the "first" row
+  a.timestamp_column = b.timestamp_column AND
+  a.artist_name = b.artist_name AND
+  a.track_name = b.track_name AND
+  a.spotify_track_uri = b.spotify_track_uri AND
+  a.ip_addr = b.ip_addr AND
+  a.ms_played = b.ms_played;
 
 
 
-SELECT * from artists LIMIT 1
+SELECT * from temp_genre_track_avg_playtime LIMIT 10
 
 SELECT * FROM spotify_data LIMIT 1
 
