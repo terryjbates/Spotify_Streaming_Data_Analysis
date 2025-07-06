@@ -1861,145 +1861,82 @@ WHERE
 -- Combine the query to get most listened days
 -- with a query to then acquire all songs on that
 -- respective high listening day.
---DROP TABLE temp_longest_listening_days 
 
+-- Find calendar days with longest listening time
 
-CREATE TABLE temp_longest_listening_days AS (
-	WITH daily_playtime AS (
-		SELECT
-			DATE_TRUNC('day', timestamp_column) AS calendar_day
-			,DATE_PART('year', timestamp_column) AS year
-			,ROUND(SUM(ms_played) / 3600000.0, 2) AS hours_played
-		FROM spotify_data
-		GROUP BY 
-			year
-			,calendar_day
-	)
-	,highest_days AS (
-		SELECT
-			calendar_day
-			,year
-		FROM (
-			SELECT 
-				calendar_day
-				,year
-				,hours_played
-				,RANK() OVER (PARTITION BY year ORDER BY hours_played DESC) AS rank
-			FROM daily_playtime
-		) ranked
-		WHERE rank = 1
-	)
-	SELECT
-		hd.calendar_day
-		,sd.timestamp_column
-		,sd.platform
-		,sd.ip_addr
-		,sd.ms_played
-		,sd.track_name
-		,sd.artist_name
-		,sd.spotify_track_uri
-	FROM highest_days AS hd
-	JOIN spotify_data AS sd
-		ON DATE_TRUNC('day', sd.timestamp_column) = hd.calendar_day
-	ORDER BY 
-		hd.calendar_day
-		,sd.timestamp_column DESC
-);
-
--- Find the artists with most tracks on highest listening days,
--- ordered by year and track count
-SELECT 
-	COUNT(artist_name) AS track_count
-	,artist_name
-	,DATE_PART('year',timestamp_column) AS year
-FROM temp_longest_listening_days
-GROUP BY 
-	artist_name
-	,year
-ORDER BY 
-	track_count DESC
-	,year
-LIMIT 20;
-
-
--- Count the number of times genres were seen 
--- on days with longest play time. 
-WITH tracks_and_genres AS (
-	SELECT 
-		tlda.calendar_day
-		,tlda.timestamp_column
-		,tlda.track_name
-		,tlda.artist_name
-		,UNNEST(a.genres) AS genre
-	FROM 
-		temp_longest_listening_days AS tlda
-	LEFT JOIN
-		artists AS a
-	ON
-		tlda.artist_name = a.artist_name
-	--LIMIT 300
-),
-ranking_table AS (
-	SELECT
-		DATE_PART('year', timestamp_column) AS year
-		,genre
-		,COUNT(genre) AS genre_count
-		,RANK() OVER (PARTITION BY DATE_PART('year', timestamp_column) ORDER BY COUNT(genre) DESC) AS ranking
-	FROM 
-		tracks_and_genres
-	GROUP BY
-		genre
-		,year
-	ORDER BY
-		year ASC
-		,ranking
-		,genre_count DESC
-)
-SELECT
-	*
-FROM 
-	ranking_table
-WHERE
-	ranking <=10;
-
-
-
--- Generating genre counts for days with 
--- highest listening time.
-WITH tracks_and_genres AS (
-	SELECT 
-		tlda.timestamp_column
-		,UNNEST(a.genres) AS genre
-	FROM 
-		temp_longest_listening_days AS tlda
-	LEFT JOIN artists AS a
-		ON tlda.artist_name = a.artist_name
-),
-ranking_table AS (
-	SELECT
-		DATE_PART('year', timestamp_column) AS year
-		,genre
-		,COUNT(genre) AS genre_count
-		,RANK() OVER (PARTITION BY DATE_PART('year', timestamp_column) ORDER BY COUNT(genre) DESC) AS ranking
-	FROM 
-		tracks_and_genres
-	GROUP BY
-		genre
-		,year
-	ORDER BY
-		year ASC
-		,ranking
-		,genre_count DESC
+WITH daily_playtime AS (
+  SELECT
+	DATE_TRUNC('day', timestamp_column) AS calendar_day,
+	DATE_PART('year', timestamp_column) AS year,
+	ROUND((SUM(ms_played) / 3600000.0), 2) AS hours_played
+  FROM spotify_data
+  GROUP BY 
+	  year
+	  ,calendar_day
 )
 SELECT *
-FROM ranking_table
-WHERE ranking <= 10;
+FROM (
+  SELECT 
+	*,
+	RANK() OVER (PARTITION BY year ORDER BY hours_played DESC) AS rank
+  FROM daily_playtime
+) ranked
+WHERE rank = 1
+ORDER BY year
 
 
 
+SELECT
+	hhp.calendar_day
+	,sd.timestamp_column
+	,sd.platform
+	,sd.ms_played
+	,sd.track_name
+	,sd.artist_name
+	,sd.spotify_track_uri
+FROM
+	highest_hours_played AS hhp
+LEFT JOIN LATERAL (SELECT *
+				   FROM spotify_data
+				   WHERE 
+				       DATE_TRUNC('day', timestamp_column) = hhp.calendar_day
+					   ORDER BY timestamp_column DESC
+					) AS sd
+ON t
+ORDER BY hhp.calendar_day
 
-SELECT * FROM temp_longest_listening_days LIMIT 1
+WHERE
+	DATE_TRUNC('day', timestamp_column) = '2019-06-30'::timestamp;
+--LIMIT 20;
+
+
 SELECT * from temp_genre_track_avg_playtime LIMIT 10
 
+-- Find the busiest weekday across listening history
+
+-- Extract numeric day of week
+SELECT 
+	EXTRACT(DOW FROM timestamp_column)
+FROM
+	spotify_data
+LIMIT 1;
+
+-- Extract count of named weekdays
+-- https://www.geeksforgeeks.org/postgresql/how-to-extract-day-of-week-from-date-field-in-postgresql/
+SELECT
+	DATE_PART('year', timestamp_column) AS year
+	,TO_CHAR(timestamp_column, 'Day') as day_of_week
+	,EXTRACT(DOW FROM timestamp_column) as numeric_day
+	,COUNT(*)
+FROM 
+	spotify_data
+GROUP BY
+	year
+	,day_of_week
+	,numeric_day
+ORDER BY
+	year ASC
+	,numeric_day
+	
 SELECT * FROM spotify_data LIMIT 1
 
