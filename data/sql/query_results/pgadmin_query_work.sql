@@ -1885,7 +1885,6 @@ WHERE rank = 1
 ORDER BY year
 
 
-
 SELECT
 	hhp.calendar_day
 	,sd.timestamp_column
@@ -1937,6 +1936,27 @@ GROUP BY
 ORDER BY
 	year ASC
 	,numeric_day
-	
+
+
+-- Extract count of named weekdays
+-- https://www.geeksforgeeks.org/postgresql/how-to-extract-day-of-week-from-date-field-in-postgresql/
+SELECT
+	--DATE_PART('year', timestamp_column) AS year
+	TO_CHAR(timestamp_column, 'Day') as day_of_week
+	,EXTRACT(DOW FROM timestamp_column) as numeric_day
+	,ROUND((SUM(ms_played) / 3600000.0), 2) AS hours_played
+	,COUNT(*) as track_count
+FROM 
+	spotify_data
+GROUP BY
+	--year
+	day_of_week
+	,numeric_day
+ORDER BY
+	--year ASC
+	numeric_day
+	,hours_played DESC
+
+
 SELECT * FROM spotify_data LIMIT 1
 
