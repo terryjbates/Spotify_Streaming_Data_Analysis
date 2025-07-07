@@ -1958,5 +1958,109 @@ ORDER BY
 	,hours_played DESC
 
 
+-- Check for NULLs in important columns
+SELECT
+    COUNT(*) FILTER (WHERE timestamp_column IS NULL) AS null_timestamps,
+    COUNT(*) FILTER (WHERE ms_played IS NULL) AS null_ms_played,
+    COUNT(*) FILTER (WHERE track_name IS NULL) AS null_track_names,
+    COUNT(*) FILTER (WHERE artist_name IS NULL) AS null_artist_names,
+    COUNT(*) FILTER (WHERE platform IS NULL) AS null_platforms,
+    COUNT(*) FILTER (WHERE ip_addr IS NULL) AS null_ips
+FROM spotify_data;
+
+
+-- Check for empty track or artist names 
+SELECT COUNT(*) FROM spotify_data WHERE track_name = '' OR track_name ~ '^\s+$';
+SELECT COUNT(*) FROM spotify_data WHERE artist_name = '' OR artist_name ~ '^\s+$';
+
+
+-- Detect duplicate records
+SELECT 
+    timestamp_column, platform, ms_played, ip_addr, track_name, artist_name
+    , COUNT(*) 
+FROM spotify_data
+GROUP BY 1,2,3,4,5,6
+HAVING COUNT(*) > 1
+ORDER BY COUNT(*) DESC;
+
+
+-- Find tracks with negative elapsed time
+SELECT * FROM spotify_data WHERE ms_played < 0;
+
+-- Locate records with long playtimes
+SELECT * FROM spotify_data WHERE ms_played > 36000000; -- 10 hours
+
+
+-- Find track with longest playtime in listening history
+SELECT
+	artist_name
+	,track_name
+	,ROUND((MAX(ms_played) / 3600000.0), 2) AS hours_played
+FROM spotify_data
+GROUP BY 
+	artist_name
+	,track_name
+ORDER BY 
+	hours_played DESC
+LIMIT 1
+
+-- Find records with weird timestampse
+SELECT * FROM spotify_data WHERE timestamp_column > now();
+
+
+-- Check for track/artist join mismatches
+SELECT COUNT(*)
+FROM spotify_data s
+LEFT JOIN sd_artists_join j ON s.id = j.sd_id
+WHERE j.artist_id IS NULL;
+
+
+
+-- Add a time of day label
+ALTER TABLE spotify_data
+ADD COLUMN time_of_day TEXT;
+
+UPDATE spotify_data
+SET time_of_day = CASE
+  WHEN EXTRACT(HOUR FROM timestamp_column) BETWEEN 5 AND 11 THEN 'morning'
+  WHEN EXTRACT(HOUR FROM timestamp_column) BETWEEN 12 AND 17 THEN 'afternoon'
+  WHEN EXTRACT(HOUR FROM timestamp_column) BETWEEN 18 AND 22 THEN 'evening'
+  ELSE 'night'
+END;
+
+
+-- Create a data cleaning log
+CREATE TABLE data_cleaning_log (
+    issue_id SERIAL PRIMARY KEY,
+    issue_description TEXT,
+    table_name TEXT,
+    column_name TEXT,
+    issue_type TEXT,  -- e.g. 'nulls', 'duplicates', 'type_error'
+    severity TEXT,    -- e.g. 'low', 'medium', 'high'
+    resolved BOOLEAN,
+    resolution_notes TEXT,
+    logged_at TIMESTAMP DEFAULT now()
+);
+
+SELECT 
+	time_of_day
+	,COUNT(*)
+FROM spotify_data
+WHERE  DATE_PART('year', timestamp_column)  = 2023
+GROUP BY time_of_day
+
+SELECT *
+FROM spotify_data
+WHERE
+	track_name IS NULL 
+	AND artist_name IS NULL 
+	AND episode_name IS NOT NULL 
+	--AND ms_played > 5000
+
+	
+
+
 SELECT * FROM spotify_data LIMIT 1
 
+SELECT (177.0/ COUNT(*)) *100
+FROM spotify_data
