@@ -2059,8 +2059,111 @@ WHERE
 
 	
 
+-- Add seasonality label
+ALTER TABLE spotify_data
+ADD COLUMN season TEXT;
 
-SELECT * FROM spotify_data LIMIT 1
+UPDATE spotify_data
+SET time_of_day = CASE
+  WHEN EXTRACT(HOUR FROM timestamp_column) BETWEEN 5 AND 11 THEN 'morning'
+  WHEN EXTRACT(HOUR FROM timestamp_column) BETWEEN 12 AND 17 THEN 'afternoon'
+  WHEN EXTRACT(HOUR FROM timestamp_column) BETWEEN 18 AND 22 THEN 'evening'
+  ELSE 'night'
+END;
+
+
+
+
+ALTER TABLE spotify_data
+ADD COLUMN season TEXT;
+
+UPDATE spotify_data
+SET season = CASE
+    WHEN (EXTRACT(MONTH FROM timestamp_column) = 12 AND EXTRACT(DAY FROM timestamp_column) >= 21)
+      OR (EXTRACT(MONTH FROM timestamp_column) IN (1, 2))
+      OR (EXTRACT(MONTH FROM timestamp_column) = 3 AND EXTRACT(DAY FROM timestamp_column) <= 19)
+        THEN 'Winter'
+    WHEN (EXTRACT(MONTH FROM timestamp_column) = 3 AND EXTRACT(DAY FROM timestamp_column) >= 20)
+      OR (EXTRACT(MONTH FROM timestamp_column) IN (4, 5))
+      OR (EXTRACT(MONTH FROM timestamp_column) = 6 AND EXTRACT(DAY FROM timestamp_column) <= 20)
+        THEN 'Spring'
+    WHEN (EXTRACT(MONTH FROM timestamp_column) = 6 AND EXTRACT(DAY FROM timestamp_column) >= 21)
+      OR (EXTRACT(MONTH FROM timestamp_column) IN (7, 8))
+      OR (EXTRACT(MONTH FROM timestamp_column) = 9 AND EXTRACT(DAY FROM timestamp_column) <= 22)
+        THEN 'Summer'
+    WHEN (EXTRACT(MONTH FROM timestamp_column) = 9 AND EXTRACT(DAY FROM timestamp_column) >= 23)
+      OR (EXTRACT(MONTH FROM timestamp_column) IN (10, 11))
+      OR (EXTRACT(MONTH FROM timestamp_column) = 12 AND EXTRACT(DAY FROM timestamp_column) <= 20)
+        THEN 'Fall'
+    ELSE 'Unknown'
+END;
+
+-- First attempt at adding season.
+SELECT 
+	DATE_PART('year', timestamp_column) AS year
+	,season
+    ,CASE season
+        WHEN 'Winter' THEN 0
+        WHEN 'Spring' THEN 1
+        WHEN 'Summer' THEN 2
+        WHEN 'Fall' THEN 3
+        ELSE 99  -- Unknown last
+     END AS season_order
+	,COUNT(*) AS track_count
+FROM spotify_data
+GROUP BY year,season
+ORDER BY 
+	year ASC
+	,season_order
+	,track_count DESC
+
+-- Amended query that correctly splits winter early and winter end. 
+WITH with_seasons AS (
+	SELECT 
+		timestamp_column,
+		DATE_PART('year', timestamp_column) AS year,
+		CASE
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 12 AND EXTRACT(DAY FROM timestamp_column) >= 21) THEN 'Winter End'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (1, 2)) THEN 'Winter Start'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 3 AND EXTRACT(DAY FROM timestamp_column) <= 19) THEN 'Winter Start'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 3 AND EXTRACT(DAY FROM timestamp_column) >= 20) THEN 'Spring'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (4, 5)) THEN 'Spring'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 6 AND EXTRACT(DAY FROM timestamp_column) <= 20) THEN 'Spring'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 6 AND EXTRACT(DAY FROM timestamp_column) >= 21) THEN 'Summer'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (7, 8)) THEN 'Summer'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 9 AND EXTRACT(DAY FROM timestamp_column) <= 22) THEN 'Summer'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 9 AND EXTRACT(DAY FROM timestamp_column) >= 23) THEN 'Fall'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (10, 11)) THEN 'Fall'
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 12 AND EXTRACT(DAY FROM timestamp_column) <= 20) THEN 'Fall'
+			ELSE 'Unknown'
+		END AS season,
+		CASE
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 12 AND EXTRACT(DAY FROM timestamp_column) >= 21) THEN 4
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (1, 2)) THEN 0
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 3 AND EXTRACT(DAY FROM timestamp_column) <= 19) THEN 0
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 3 AND EXTRACT(DAY FROM timestamp_column) >= 20) THEN 1
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (4, 5)) THEN 1
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 6 AND EXTRACT(DAY FROM timestamp_column) <= 20) THEN 1
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 6 AND EXTRACT(DAY FROM timestamp_column) >= 21) THEN 2
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (7, 8)) THEN 2
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 9 AND EXTRACT(DAY FROM timestamp_column) <= 22) THEN 2
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 9 AND EXTRACT(DAY FROM timestamp_column) >= 23) THEN 3
+			WHEN (EXTRACT(MONTH FROM timestamp_column) IN (10, 11)) THEN 3
+			WHEN (EXTRACT(MONTH FROM timestamp_column) = 12 AND EXTRACT(DAY FROM timestamp_column) <= 20) THEN 3
+			ELSE 99
+		END AS season_order
+	FROM spotify_data
+)
+SELECT 
+	year,
+	season,
+	season_order,
+	COUNT(*) AS track_count
+FROM with_seasons
+GROUP BY year, season, season_order
+ORDER BY year, season_order;
+
+
 
 SELECT (177.0/ COUNT(*)) *100
 FROM spotify_data
