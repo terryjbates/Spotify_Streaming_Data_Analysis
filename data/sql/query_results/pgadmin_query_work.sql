@@ -2164,6 +2164,32 @@ GROUP BY year, season, season_order
 ORDER BY year, season_order;
 
 
+-- Detect IP address and platform data
+SELECT 
+    timestamp_column
+    ,ip_addr
+    ,platform
+FROM spotify_data
+WHERE ip_addr IS NOT NULL
+GROUP BY
+	timestamp_column
+	,ip_addr
+	,platform
+ORDER BY ip_addr ASC, platform
+
+
+-- Detect IP address and platform data
+SELECT 
+	DISTINCT ip_addr
+    ,platform
+FROM spotify_data
+WHERE ip_addr IS NOT NULL
+GROUP BY
+	ip_addr
+	,platform
+ORDER BY ip_addr ASC, platform
+
+
 
 SELECT (177.0/ COUNT(*)) *100
 FROM spotify_data
