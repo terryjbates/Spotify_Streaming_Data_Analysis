@@ -2308,3 +2308,85 @@ GROUP BY
 ORDER BY
 	hours_played DESC
 	,tracks_played DESC 
+
+SELECT * FROM spotify_data LIMIT 1
+
+
+SELECT
+    sd.timestamp_column,
+    sd.ms_played,
+    sd.track_name,
+    genre
+FROM spotify_data AS sd
+JOIN sd_artists_join sdj 
+	ON sd.id = sdj.sd_id
+JOIN artists AS a
+	ON sdj.artist_id = a.id
+-- UNNEST each genre in the genre array into its own row
+CROSS JOIN UNNEST(a.genres) AS genre
+WHERE a.genres IS NOT NULL
+--AND sd.artist_name ILIKE '%ushi%';
+AND DATE_PART('year', sd.timestamp_column) = 2025;
+
+
+SELECT 
+    sd.year_played
+    ,genre
+    ,sd.ms_played
+FROM spotify_data sd
+JOIN sd_artists_join sdj ON sd.id = sdj.sd_id
+JOIN artists a ON sdj.artist_id = a.id
+CROSS JOIN UNNEST(a.genres) AS genre
+WHERE a.genres IS NOT NULL
+AND sd.year_played = 2025;
+
+
+-- Create indexes on timestamp
+CREATE INDEX IF NOT EXISTS spotify_data_ts_idx
+ON public.spotify_data (timestamp_column);
+
+
+-- Create index for commen expression
+CREATE INDEX IF NOT EXISTS spotify_data_year_idx
+ON public.spotify_data ((DATE_PART('year', timestamp_column)));
+
+-- Add a dedicated year_played column
+ALTER TABLE spotify_data
+ADD COLUMN year_played INTEGER;
+
+UPDATE spotify_data
+SET year_played = EXTRACT(YEAR FROM timestamp_column)::INTEGER;
+
+-- Create trigger
+CREATE OR REPLACE FUNCTION update_year_played()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.year_played := EXTRACT(YEAR FROM NEW.timestamp_column)::INTEGER;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Attach trigger
+CREATE TRIGGER set_year_played
+BEFORE INSERT OR UPDATE ON spotify_data
+FOR EACH ROW
+EXECUTE FUNCTION update_year_played();
+
+
+-- Create index
+CREATE INDEX IF NOT EXISTS spotify_data_year_idx
+ON spotify_data (year_played);
+
+
+SELECT 
+    sd.year_played
+    ,genre
+    ,sd.ms_played
+FROM spotify_data sd
+JOIN sd_artists_join AS sdj 
+	ON sd.id = sdj.sd_id
+JOIN artists AS a 
+	ON sdj.artist_id = a.id
+CROSS JOIN UNNEST(a.genres) AS genre
+WHERE a.genres IS NOT NULL
