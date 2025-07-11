@@ -2163,6 +2163,9 @@ FROM with_seasons
 GROUP BY year, season, season_order
 ORDER BY year, season_order;
 
+SELECT (177.0/ COUNT(*)) *100
+FROM spotify_data
+
 
 -- Detect IP address and platform data
 SELECT 
@@ -2190,6 +2193,118 @@ GROUP BY
 ORDER BY ip_addr ASC, platform
 
 
-
-SELECT (177.0/ COUNT(*)) *100
+SELECT 
+	DISTINCT ip_addr
+    ,platform
 FROM spotify_data
+WHERE ip_addr IS NOT NULL
+AND
+	platform ILIKE '%OS X%'
+GROUP BY
+	ip_addr
+	,platform
+ORDER BY ip_addr ASC, platform
+
+
+DROP TABLE ip_metadata;
+
+-- Create table to store IP metadata
+CREATE TABLE IF NOT EXISTS ip_metadata (
+    ip_addr VARCHAR(45) PRIMARY KEY,  -- supports IPv4/IPv6
+    status VARCHAR(10) NOT NULL,
+    continent_code VARCHAR(5),
+    country_code CHAR(2),
+    region_name VARCHAR(100),
+    city VARCHAR(100),
+    zip VARCHAR(20),
+    lat DOUBLE PRECISION,
+    lon DOUBLE PRECISION,
+    timezone VARCHAR(50),
+    isp VARCHAR(150),
+    org VARCHAR(150),
+    asn VARCHAR(50),        -- renamed from `as` to avoid SQL reserved word
+    asname VARCHAR(150),
+    mobile BOOLEAN,
+    proxy BOOLEAN,
+    hosting BOOLEAN
+);
+
+
+-- Added indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_ip_metadata_country_code ON ip_metadata(country_code);
+CREATE INDEX IF NOT EXISTS idx_ip_metadata_city ON ip_metadata(city);
+CREATE INDEX IF NOT EXISTS idx_ip_metadata_isp ON ip_metadata(isp);
+CREATE INDEX IF NOT EXISTS idx_ip_metadata_asn ON ip_metadata(asn);
+
+
+-- Grant insert privileges
+GRANT INSERT ON TABLE ip_metadata TO spotify_postgres_user;
+
+
+
+SELECT * FROM ip_metadata LIMIT 2;
+SELECT * FROM spotify_data LIMIT 3;
+
+SELECT ip_addr
+	,platform
+	,timestamp_column
+FROM spotify_data 
+WHERE 
+	DATE_PART('year',timestamp_column) > 2023
+	AND platform <> 'not_applicable'
+LIMIT 500;
+
+-- Grab the platforms and amount of played tracks
+SELECT DISTINCT platform
+	,DATE_PART('year',timestamp_column) AS year
+	,COUNT(*) as platform_count
+FROM spotify_data
+WHERE
+	--platform ILIKE '%sonos%'
+	platform ILIKE '%echo%'
+
+GROUP BY 
+	platform
+	,year
+ORDER BY
+	year ASC
+	,platform_count DESC
+
+SELECT 
+	ipm.ip_addr
+	,sd.timestamp_column
+	,ipm.country_code
+	,ipm.region_name
+	,ipm.city
+	,sd.track_name
+	,sd.artist_name
+	,sd.platform
+FROM ip_metadata AS ipm
+LEFT JOIN
+	spotify_data AS sd
+ON
+	ipm.ip_addr = sd.ip_addr
+WHERE
+	ipm.country_code <> 'US'
+	AND DATE_PART('year',sd.timestamp_column) > 2023
+ORDER BY
+	sd.timestamp_column ASC
+
+-- Collect org and isp data. org can identify company,
+-- organization, and isp
+SELECT 
+	 ipm.org
+	,ipm.isp
+		,ROUND((SUM(sd.ms_played) / 3600000.0), 2) AS hours_played
+	,COUNT(sd.track_name) AS tracks_played
+FROM ip_metadata AS ipm
+LEFT JOIN
+	spotify_data AS sd
+ON
+	ipm.ip_addr = sd.ip_addr
+GROUP BY 
+	ipm.org
+	,ipm.isp
+ORDER BY
+	hours_played DESC
+	,tracks_played DESC 
