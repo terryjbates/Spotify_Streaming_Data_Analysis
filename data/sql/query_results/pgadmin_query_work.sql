@@ -2390,3 +2390,45 @@ JOIN artists AS a
 	ON sdj.artist_id = a.id
 CROSS JOIN UNNEST(a.genres) AS genre
 WHERE a.genres IS NOT NULL
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT 
+    sd.year_played,
+    genre,
+    sd.ms_played
+FROM spotify_data sd
+JOIN sd_artists_join AS sdj 
+    ON sd.id = sdj.sd_id
+JOIN artists AS a 
+    ON sdj.artist_id = a.id
+CROSS JOIN UNNEST(a.genres) AS genre
+WHERE a.genres IS NOT NULL;
+
+
+
+SELECT 
+    DATE_PART('year', sd.timestamp_column)::int AS year,
+    g AS genre,
+    sd.ms_played
+FROM spotify_data sd
+JOIN sd_artists_join sdj ON sd.id = sdj.sd_id
+JOIN artists a ON sdj.artist_id = a.id
+CROSS JOIN UNNEST(a.genres) AS g
+WHERE a.genres IS NOT NULL
+
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT 
+    DATE_PART('year', sd.timestamp_column)::int AS year,
+    g AS genre,
+    sd.ms_played
+FROM spotify_data sd
+JOIN sd_artists_join sdj ON sd.id = sdj.sd_id
+JOIN artists a ON sdj.artist_id = a.id
+CROSS JOIN UNNEST(a.genres) AS g
+WHERE a.genres IS NOT NULL;
+
+-- Check indexes on spotify_data
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'spotify_data';
