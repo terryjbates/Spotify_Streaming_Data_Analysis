@@ -2432,3 +2432,126 @@ WHERE a.genres IS NOT NULL;
 SELECT indexname, indexdef
 FROM pg_indexes
 WHERE tablename = 'spotify_data';
+
+
+-- Listening time per genre
+SELECT 
+    sd.year_played AS year_played
+    ,genre
+    ,SUM(sd.ms_played) AS total_ms_played
+FROM spotify_data sd
+JOIN sd_artists_join sdj 
+    ON sd.id = sdj.sd_id
+JOIN artists a 
+    ON sdj.artist_id = a.id
+CROSS JOIN UNNEST(a.genres) AS genre
+WHERE 
+	a.genres IS NOT NULL
+ 	AND sd.ms_played >= 5000  -- Exclude skipped or short listens
+GROUP BY 
+	year_played
+	,genre
+ORDER BY 
+	year_played
+	,total_ms_played DESC;
+
+
+SELECT 
+	--COUNT(*)
+	ROUND((SUM(ms_played) / 3600000.0), 2) AS hours_played
+FROM spotify_data
+WHERE year_played = 2015;
+
+SELECT 
+    sd.year_played AS year_played
+    ,genre
+	,sd.artist_name
+	,sd.track_name
+    --,SUM(sd.ms_played) AS total_ms_played
+	--,ROUND((SUM(sd.ms_played) / 3600000.0), 2) AS hours_played
+FROM spotify_data sd
+JOIN sd_artists_join sdj 
+    ON sd.id = sdj.sd_id
+JOIN artists a 
+    ON sdj.artist_id = a.id
+CROSS JOIN UNNEST(a.genres) AS genre
+WHERE 
+	a.genres IS NOT NULL
+	AND sd.year_played = 2019
+ 	AND sd.ms_played >= 5000  -- Exclude skipped or short listens
+	AND genre = 'country' 
+GROUP BY 
+	year_played
+	,genre
+	,sd.artist_name
+	,sd.track_name
+ORDER BY 
+	year_played
+	,genre
+	--,total_ms_played DESC;
+
+
+-- Repair the incorrect genres data for artist "Darius."
+-- They were confused for "Darius Rucker."
+
+SELECT * FROM artists WHERE artist_name = 'Darius'
+
+UPDATE artists
+SET genres = '{"french house", "indie soul", "nu disco"}'
+WHERE artist_name = 'Darius'
+AND id = 3800;
+
+
+-- Test
+
+-- Generate Top Genres per Year
+WITH artist_playtime AS (
+	SELECT a.artist_name
+		,a.genres
+		,sd.ms_played
+		,DATE_PART('year', sd.timestamp_column) AS stream_year
+	FROM artists AS a
+	JOIN sd_artists_join AS sdj 
+		ON a.id = sdj.artist_id
+	JOIN spotify_data AS sd 
+		ON sdj.sd_id = sd.id
+	-- WHERE a.artist_name LIKE '%2 Bit Pie'
+	--WHERE DATE_PART('year', sd.timestamp_column) = 2019
+),
+genre_ranks AS (
+	SELECT
+		stream_year,
+		UNNEST(genres) AS genre,
+		ROUND((CAST(SUM(ms_played) AS numeric)  / 3600000) , 2) AS hours_played,
+		RANK() OVER (
+			PARTITION BY stream_year
+			ORDER BY SUM(ms_played) DESC
+		) AS genre_rank
+	FROM artist_playtime
+	GROUP BY stream_year, genre
+)
+SELECT *
+FROM genre_ranks
+WHERE genre_rank <= 10
+ORDER BY stream_year, genre_rank;
+
+
+
+-- Check table perms. SQLAlchemy not able to access TEMP tables
+SELECT grantee, privilege_type, is_grantable
+    FROM information_schema.role_table_grants
+    WHERE
+        table_schema = quote_ident('public')
+        AND table_name = quote_ident('spotify_data')
+        AND privilege_type = 'SELECT'
+
+
+-- Attempt to grant SELECT privileges to spotify_postgres_user to table
+-- Grant insert privileges
+GRANT SELECT ON TABLE temp_most_played_tracks TO spotify_postgres_user;
+
+-- Insert dummy record for year with no listening history
+
+INSERT INTO spotify_data (timestamp_column, ms_played)
+VALUES
+	('2016-01-01 00:00:01-08', 0)
