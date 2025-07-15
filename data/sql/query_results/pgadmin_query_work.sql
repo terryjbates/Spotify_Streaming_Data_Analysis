@@ -2549,6 +2549,7 @@ SELECT grantee, privilege_type, is_grantable
 -- Attempt to grant SELECT privileges to spotify_postgres_user to table
 -- Grant insert privileges
 GRANT SELECT ON TABLE temp_most_played_tracks TO spotify_postgres_user;
+GRANT SELECT ON TABLE temp_longest_listening_days TO spotify_postgres_user;
 
 -- Insert dummy record for year with no listening history
 
